@@ -4,14 +4,12 @@ const nextConfig = {
     remotePatterns: [
       { protocol: 'https', hostname: 'image.tmdb.org' },
       { protocol: 'https', hostname: 'm.media-amazon.com' },
-      { protocol: 'https', hostname: 'via.placeholder.com' },
-    ],
+      { protocol: 'https', hostname: 'via.placeholder.com' }
+    ]
   },
   experimental: {
-    serverActions: {
-      allowedOrigins: ['*'],
-    },
-  },
+    serverActions: { allowedOrigins: ['*'] }
+  }
 };
 
 export default nextConfig;

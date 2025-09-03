@@ -7,10 +7,9 @@ const TMDB = {
 export async function tmdbSearchMovies(q: string, key: string) {
   const url = `${TMDB.base}/search/movie?query=${encodeURIComponent(q)}&include_adult=false&language=en-US&page=1`;
   const headers: Record<string, string> = {};
-  if (key.startsWith('ey')) headers.Authorization = `Bearer ${key}`; // v4 token only
+  if (key.startsWith('ey')) headers.Authorization = `Bearer ${key}`; // v4 bearer only
   const res = await fetch(url, { headers });
 
-  // Fallback to v3 key if auth fails
   if (res.status === 401 || res.status === 404) {
     const res2 = await fetch(`${url}&api_key=${encodeURIComponent(key)}`);
     if (!res2.ok) throw new Error('TMDb search failed');
@@ -24,10 +23,9 @@ export async function tmdbSearchMovies(q: string, key: string) {
 export async function tmdbMovieDetails(tmdbId: number, key: string) {
   const baseUrl = `${TMDB.base}/movie/${tmdbId}?append_to_response=external_ids`;
   const headers: Record<string, string> = {};
-  if (key.startsWith('ey')) headers.Authorization = `Bearer ${key}`; // v4 token only
+  if (key.startsWith('ey')) headers.Authorization = `Bearer ${key}`; // v4 bearer only
   const res = await fetch(baseUrl, { headers });
 
-  // Fallback to v3 key if auth fails
   if (res.status === 401 || res.status === 404) {
     const res2 = await fetch(`${baseUrl}&api_key=${encodeURIComponent(key)}`);
     if (!res2.ok) throw new Error('TMDb details failed');

@@ -1,7 +1,5 @@
-import type { NextConfig } from 'next';
-
-// NOTE: explicit semicolons to avoid parser quirks.
-const nextConfig: NextConfig = {
+/** @type {import('next').NextConfig} */
+const nextConfig = {
   images: {
     remotePatterns: [
       { protocol: 'https', hostname: 'image.tmdb.org' },

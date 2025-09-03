@@ -21,3 +21,71 @@
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx"],
   "exclude": ["node_modules"]
 }
+
+//// FILE: postcss.config.js
+module.exports = {
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {},
+  },
+};
+
+//// FILE: tailwind.config.ts
+import type { Config } from 'tailwindcss'
+
+export default {
+  content: [
+    './app/**/*.{ts,tsx}',
+    './components/**/*.{ts,tsx}'
+  ],
+  theme: {
+    extend: {},
+  },
+  plugins: [],
+} satisfies Config;
+
+//// FILE: .env.example
+# Copy to .env.local and fill in on the server / Vercel project settings
+TMDB_KEY=your_tmdb_api_key
+OMDB_KEY=your_omdb_api_key
+NEXT_PUBLIC_SITE_NAME=Movie Ratings Finder
+
+//// FILE: next-env.d.ts
+/// <reference types="next" />
+/// <reference types="next/image-types/global" />
+
+// NOTE: This file should not be edited
+// see https://nextjs.org/docs/basic-features/typescript for more information.
+
+//// FILE: app/globals.css
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { color-scheme: dark; }
+html, body { height: 100%; }
+body { @apply bg-gradient-to-br from-slate-900 via-indigo-900 to-black text-slate-100; }
+
+//// FILE: lib/types.ts
+export type SearchResult = {
+  tmdbId: number;
+  title: string;
+  year: string;
+  poster: string | null; // full URL
+};
+
+export type DetailResult = {
+  tmdbId: number;
+  imdbId: string | null;
+  title: string;
+  year: string;
+  genres: string[];
+  poster: string | null; // full URL
+  plot: string | null;
+  imdbRating: string | null; // e.g., "8.5/10" or null if missing
+  rottenTomatoes: string | null; // e.g., "94%" or null if missing
+  links: {
+    imdb?: string;
+    rottenTomatoesSearch?: string;
+  };
+};

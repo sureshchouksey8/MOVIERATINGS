@@ -1,13 +1,12 @@
 {
   "name": "movie-ratings-site",
-  "version": "1.0.1",
+  "version": "1.0.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
-    "test": "vitest run"
+    "lint": "next lint"
   },
   "dependencies": {
     "next": "14.2.4",
@@ -24,7 +23,6 @@
     "tailwindcss": "3.4.3",
     "typescript": "5.4.5",
     "eslint": "8.57.0",
-    "eslint-config-next": "14.2.4",
-    "vitest": "1.6.0"
+    "eslint-config-next": "14.2.4"
   }
 }

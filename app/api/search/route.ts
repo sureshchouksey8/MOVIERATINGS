@@ -8,7 +8,7 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const q = (searchParams.get('q') || '').trim();
   if (!q || q.length < 2) {
-    return NextResponse.json({ results: [] }, { status: 200, headers: cacheHeaders(60) });
+    return NextResponse.json({ results: [] }, { status: 200, headers: cacheHeaders(30) });
   }
   const TMDB_KEY = process.env.TMDB_KEY;
   if (!TMDB_KEY) return NextResponse.json({ error: 'Server missing TMDB_KEY' }, { status: 500 });
@@ -21,7 +21,7 @@ export async function GET(req: Request) {
       year: (m.release_date || '').slice(0, 4) || '—',
       poster: m.poster_path ? tmdbImageUrl(m.poster_path, 'w342') : null,
     }));
-    return NextResponse.json({ results }, { status: 200, headers: cacheHeaders(3600) });
+    return NextResponse.json({ results }, { status: 200, headers: cacheHeaders(120) });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'Search failed' }, { status: 500 });
   }
@@ -30,5 +30,5 @@ export async function GET(req: Request) {
 function cacheHeaders(seconds: number) {
   return {
     'Cache-Control': `s-maxage=${seconds}, stale-while-revalidate=${Math.max(60, seconds)}`,
-  } as Record<string, string>;
+  };
 }

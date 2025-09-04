@@ -1,8 +1,6 @@
 'use client';
 import React, { useEffect, useRef, useState } from 'react';
 
-type Item = { tmdbId: number; title: string; year: string; poster: string | null };
-
 export default function SearchBar({
   onSelect,
   onClearSelection,
@@ -12,19 +10,35 @@ export default function SearchBar({
 }) {
   const [q, setQ] = useState('');
   const [loading, setLoading] = useState(false);
-  const [results, setResults] = useState<Item[]>([]);
+  const [results, setResults] = useState<{ tmdbId: number; title: string; year: string; poster: string | null }[]>([]);
   const [open, setOpen] = useState(false);
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(false);
-  const [hi, setHi] = useState<number>(-1); // highlight index
   const abortRef = useRef<AbortController | null>(null);
-  const seqRef = useRef(0);
+  const seq = useRef(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const listRef = useRef<HTMLDivElement | null>(null);
 
-  // Fetch results for a given page
-  async function fetchPage(term: string, targetPage = 1, append = false) {
-    const seq = ++seqRef.current;
+  // Global "/" hotkey to focus the input
+  useEffect(() => {
+    function onDocKey(e: KeyboardEvent) {
+      if (e.key === '/') {
+        e.preventDefault();
+        inputRef.current?.focus();
+      }
+    }
+    document.addEventListener('keydown', onDocKey);
+    return () => document.removeEventListener('keydown', onDocKey);
+  }, []);
+
+  useEffect(() => {
+    const term = q.trim();
+
+    if (term.length < 2) {
+      setResults([]);
+      setOpen(false);
+      setLoading(false);
+      return;
+    }
+
+    const id = ++seq.current;
     abortRef.current?.abort();
     const ctrl = new AbortController();
     abortRef.current = ctrl;
@@ -32,115 +46,67 @@ export default function SearchBar({
     setLoading(true);
     setOpen(true);
 
-    const bust = Date.now();
-    const url = `/api/search?q=${encodeURIComponent(term)}&page=${targetPage}&t=${bust}`;
-    try {
-      const r = await fetch(url, { signal: ctrl.signal, cache: 'no-store', headers: { 'x-no-cache': String(bust) } });
-      const j = await r.json();
-      if (seq !== seqRef.current) return;
-      const newResults: Item[] = Array.isArray(j.results) ? j.results : [];
-      setResults(append ? [...results, ...newResults] : newResults);
-      setPage(j.page || targetPage);
-      setHasMore((j.total_pages || 1) > (j.page || targetPage));
-      setHi(newResults.length ? 0 : -1);
-    } catch (err: any) {
-      if (err?.name !== 'AbortError') {
-        setResults([]);
-        setHasMore(false);
+    const t = setTimeout(async () => {
+      const bust = Date.now();
+      try {
+        const r = await fetch(`/api/search?q=${encodeURIComponent(term)}&t=${bust}`, {
+          signal: ctrl.signal,
+          cache: 'no-store',
+          headers: { 'x-no-cache': String(bust) },
+        });
+        const j = await r.json();
+        if (id === seq.current) {
+          setResults(j.results || []);
+          setOpen(true);
+        }
+      } catch (err: any) {
+        if (err?.name !== 'AbortError' && id === seq.current) {
+          setResults([]);
+          setOpen(false);
+        }
+      } finally {
+        if (id === seq.current) setLoading(false);
       }
-    } finally {
-      if (seq === seqRef.current) setLoading(false);
-    }
-  }
+    }, 200);
 
-  // Debounced search on input change
-  useEffect(() => {
-    const term = q.trim();
-    if (term.length < 2) {
-      setResults([]);
-      setOpen(false);
-      setLoading(false);
-      setPage(1);
-      setHasMore(false);
-      setHi(-1);
-      return;
-    }
-    const t = setTimeout(() => fetchPage(term, 1, false), 200);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => {
+      ctrl.abort();
+      clearTimeout(t);
+    };
   }, [q]);
 
   function clearAll() {
     setQ('');
     setResults([]);
     setOpen(false);
-    setPage(1);
-    setHasMore(false);
-    setHi(-1);
     onClearSelection?.();
     requestAnimationFrame(() => inputRef.current?.focus());
   }
 
-  function handleSelectByIndex(index: number) {
-    const item = results[index];
-    if (!item) return;
-    onSelect(item.tmdbId);
-    // reset so user can immediately type again
+  function pick(tmdbId: number) {
+    onSelect(tmdbId);
     setQ('');
     setResults([]);
     setOpen(false);
-    setPage(1);
-    setHasMore(false);
-    setHi(-1);
     requestAnimationFrame(() => inputRef.current?.focus());
-  }
-
-  function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (!open && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
-      setOpen(true);
-      return;
-    }
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      if (!results.length) return;
-      const next = (hi + 1) % results.length;
-      setHi(next);
-      listRef.current?.querySelectorAll('[data-opt]')[next]?.scrollIntoView({ block: 'nearest' });
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      if (!results.length) return;
-      const next = (hi - 1 + results.length) % results.length;
-      setHi(next);
-      listRef.current?.querySelectorAll('[data-opt]')[next]?.scrollIntoView({ block: 'nearest' });
-    } else if (e.key === 'Enter') {
-      if (open && hi >= 0) {
-        e.preventDefault();
-        handleSelectByIndex(hi);
-      }
-    } else if (e.key === 'Escape') {
-      clearAll();
-    }
-  }
-
-  async function loadMore() {
-    const term = q.trim();
-    if (!term || !hasMore) return;
-    await fetchPage(term, page + 1, true);
   }
 
   return (
     <div className="relative">
       <input
+        id="movie-search-input"
         ref={inputRef}
-        className="w-full rounded-xl bg-slate-800/70 pl-11 pr-10 py-3 text-base outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-500 transition-shadow"
-        placeholder="Search any movie…"
+        className="w-full rounded-xl bg-slate-800/70 pl-11 pr-10 py-3 text-base outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-500"
+        placeholder="Search any movie… (press / to focus)"
         value={q}
-        onChange={(e) => {
-          const val = e.target.value;
-          setQ(val);
-          setOpen(val.trim().length >= 2);
+        onChange={(e) => setQ(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') clearAll();
+          if (e.key === 'Enter' && open && results.length > 0) {
+            e.preventDefault();
+            pick(results[0].tmdbId); // fast path: first result
+          }
         }}
-        onKeyDown={onKeyDown}
         onFocus={() => {
           if (results.length >= 1) setOpen(true);
         }}
@@ -154,7 +120,6 @@ export default function SearchBar({
         <button
           aria-label="Clear search"
           className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md px-2 py-1 text-sm text-slate-300 hover:bg-slate-700/60"
-          onMouseDown={(e) => e.preventDefault()}
           onClick={clearAll}
         >
           ✕
@@ -162,26 +127,17 @@ export default function SearchBar({
       )}
 
       {open && (
-        <div
-          ref={listRef}
-          className="absolute z-20 mt-2 max-h-96 w-full overflow-auto rounded-xl border border-slate-700/50 bg-slate-900/95 p-2 shadow-2xl backdrop-blur transition-all duration-200"
-          onMouseDown={(e) => e.preventDefault()} // keep input from blurring
-        >
-          {loading && results.length === 0 && (
-            <div className="p-3 text-sm text-slate-300">Searching…</div>
+        <div className="absolute z-10 mt-2 max-h-96 w-full overflow-auto rounded-xl border border-slate-700/50 bg-slate-900/95 p-2 shadow-2xl backdrop-blur">
+          {loading && <div className="p-3 text-sm text-slate-300">Searching…</div>}
+          {!loading && results.length === 0 && (
+            <div className="p-3 text-sm text-slate-400">No matches. Try a different title.</div>
           )}
-
           <ul className="divide-y divide-slate-700/40">
-            {results.map((m, idx) => (
-              <li
-                key={`${m.tmdbId}-${idx}`}
-                data-opt
-                className={idx === hi ? 'bg-slate-800/60 rounded-md' : 'hover:bg-slate-800/40 rounded-md'}
-                onMouseEnter={() => setHi(idx)}
-              >
+            {results.map((m) => (
+              <li key={m.tmdbId} className="hover:bg-slate-800/40">
                 <button
                   className="flex w-full items-center gap-3 p-2 text-left"
-                  onClick={() => handleSelectByIndex(idx)}
+                  onClick={() => pick(m.tmdbId)}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
@@ -197,18 +153,6 @@ export default function SearchBar({
               </li>
             ))}
           </ul>
-
-          {/* More results */}
-          {!loading && hasMore && (
-            <div className="mt-2 flex justify-center">
-              <button
-                className="rounded-lg border border-slate-700/60 bg-slate-800/60 px-3 py-1 text-sm text-slate-200 hover:bg-slate-700/60"
-                onClick={loadMore}
-              >
-                More results…
-              </button>
-            </div>
-          )}
         </div>
       )}
     </div>

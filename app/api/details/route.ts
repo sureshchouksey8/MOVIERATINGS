@@ -18,6 +18,7 @@ export async function GET(req: Request) {
     const t = await tmdbMovieDetails(tmdbId, TMDB_KEY);
     const imdbId: string | null = t?.external_ids?.imdb_id || null;
 
+    // ratings
     let imdbRating: string | null = null;
     let rottenTomatoes: string | null = null;
 
@@ -32,15 +33,13 @@ export async function GET(req: Request) {
           if (imdbFromRatings) imdbRating = imdbFromRatings;
         }
         if (Array.isArray(o?.Ratings)) {
-          const rt = o.Ratings.find((r: any) =>
-            String(r.Source).toLowerCase().includes('rotten')
-          )?.Value;
+          const rt = o.Ratings.find((r: any) => String(r.Source).toLowerCase().includes('rotten'))?.Value;
           if (rt) rottenTomatoes = rt;
         }
-      } catch {/* ignore OMDb errors */}
+      } catch { /* ignore OMDb failures */ }
     }
 
-    // choose best YouTube trailer (official trailer > trailer > teaser; newest wins)
+    // choose best YouTube trailer: official trailer > trailer > teaser, newest first
     let trailerKey: string | undefined;
     const vids = Array.isArray(t?.videos?.results) ? t.videos.results : [];
     if (vids.length) {
@@ -75,20 +74,17 @@ export async function GET(req: Request) {
         imdb: imdbId ? `https://www.imdb.com/title/${imdbId}/` : undefined,
         rottenTomatoesSearch: `https://www.rottentomatoes.com/search?search=${encodeURIComponent(t.title || '')}`,
       },
-      // expose trailer if we found one
       ...(trailerKey
         ? { trailer: { youtubeKey: trailerKey, youtubeUrl: `https://www.youtube.com/watch?v=${trailerKey}` } }
         : {}),
     };
 
-    return NextResponse.json(details, { status: 200, headers: cacheHeaders(86400) });
+    // no-store to avoid “stuck” details
+    return NextResponse.json(details, {
+      status: 200,
+      headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0' },
+    });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'Details failed' }, { status: 500 });
   }
-}
-
-function cacheHeaders(seconds: number) {
-  return {
-    'Cache-Control': `s-maxage=${seconds}, stale-while-revalidate=${Math.max(60, seconds)}`,
-  };
 }

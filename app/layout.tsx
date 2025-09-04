@@ -1,16 +1,17 @@
-// inside export const metadata:
+import './globals.css';
+import type { Metadata } from 'next';
+
 export const metadata: Metadata = {
   title: process.env.NEXT_PUBLIC_SITE_NAME || 'Movie Ratings Finder',
   description: 'Search movies → see IMDb + Rotten Tomatoes (when available).',
-  openGraph: {
-    title: 'Movie Ratings Finder',
-    description: 'Only the ratings that matter — by RONNY',
-    images: ['/api/og'], // generic; per-movie OG is a next step
-  },
-  twitter: {
-    card: 'summary_large_image',
-    title: 'Movie Ratings Finder',
-    description: 'Only the ratings that matter — by RONNY',
-    images: ['/api/og'],
-  },
 };
+
+export default function RootLayout(
+  { children }: Readonly<{ children: React.ReactNode }>
+) {
+  return (
+    <html lang="en">
+      <body>{children}</body>
+    </html>
+  );
+}

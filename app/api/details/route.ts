@@ -1,93 +1,134 @@
 import { NextResponse } from 'next/server';
 import { tmdbMovieDetails, tmdbImageUrl } from '@/lib/tmdb';
-import { omdbByImdbId } from '@/lib/omdb';
+import { omdbByImdbId, omdbFindByCandidates } from '@/lib/omdb';
 import type { DetailResult } from '@/lib/types';
-import { lru } from '@/lib/cache';
-import { limitOrThrow } from '@/lib/rateLimit';
 
 export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
 
 export async function GET(req: Request) {
-  try {
-    limitOrThrow(req, 'details', 120); // 120 rpm per IP
-  } catch (e: any) {
-    return new NextResponse(e.message, { status: e.status || 429, headers: e.headers });
-  }
-
   const { searchParams } = new URL(req.url);
   const tmdbId = Number(searchParams.get('tmdbId') || '');
-  if (!tmdbId) return NextResponse.json({ error: 'tmdbId required' }, { status: 400, headers: noStore() });
+  if (!tmdbId) return NextResponse.json({ error: 'tmdbId required' }, { status: 400 });
 
   const TMDB_KEY = process.env.TMDB_KEY;
   const OMDB_KEY = process.env.OMDB_KEY || '';
-  if (!TMDB_KEY) return NextResponse.json({ error: 'Server missing TMDB_KEY' }, { status: 500, headers: noStore() });
-
-  // cache
-  const cacheKey = `details:${tmdbId}`;
-  const cached = lru.get<DetailResult>(cacheKey);
-  if (cached) return NextResponse.json(cached, { status: 200, headers: noStore() });
+  if (!TMDB_KEY) return NextResponse.json({ error: 'Server missing TMDB_KEY' }, { status: 500 });
 
   try {
     const t = await tmdbMovieDetails(tmdbId, TMDB_KEY);
-    const imdbId: string | null = t?.external_ids?.imdb_id || null;
+    const rawTitle = t.title || t.original_title || '';
+    const year = (t.release_date || '').slice(0, 4) || null;
 
+    // Build a smart candidate list for OMDb title fallback
+    const candidates = buildTitleCandidates(rawTitle, t?.original_title, t?.tagline);
+
+    // Ratings
+    let imdbId: string | null = t?.external_ids?.imdb_id || null;
     let imdbRating: string | null = null;
     let rottenTomatoes: string | null = null;
 
-    // OMDb (cache it too if you want; here it’s cheap enough)
-    if (imdbId && OMDB_KEY) {
+    // Helper to extract ratings from an OMDb full record
+    function applyOmdb(o: any) {
+      if (!o) return;
+      if (!imdbId && o.imdbID) imdbId = o.imdbID;
+
+      if (o?.imdbRating && o.imdbRating !== 'N/A') {
+        imdbRating = `${o.imdbRating}/10`;
+      } else if (Array.isArray(o?.Ratings)) {
+        const imdbFromRatings = o.Ratings.find((r: any) =>
+          String(r.Source).toLowerCase().includes('internet movie database')
+        )?.Value;
+        if (imdbFromRatings) imdbRating = imdbFromRatings;
+      }
+
+      if (Array.isArray(o?.Ratings)) {
+        const rt = o.Ratings.find((r: any) =>
+          String(r.Source).toLowerCase().includes('rotten')
+        )?.Value;
+        if (rt) rottenTomatoes = rt;
+      }
+    }
+
+    // 1) Prefer IMDb ID if TMDb provided one
+    if (OMDB_KEY && imdbId) {
       try {
         const o = await omdbByImdbId(imdbId, OMDB_KEY);
-        if (o?.imdbRating && o.imdbRating !== 'N/A') imdbRating = `${o.imdbRating}/10`;
-        else if (Array.isArray(o?.Ratings)) {
-          const imdbFromRatings = o.Ratings.find((r: any) =>
-            String(r.Source).toLowerCase().includes('internet movie database')
-          )?.Value;
-          if (imdbFromRatings) imdbRating = imdbFromRatings;
-        }
-        if (Array.isArray(o?.Ratings)) {
-          const rt = o.Ratings.find((r: any) => String(r.Source).toLowerCase().includes('rotten'))?.Value;
-          if (rt) rottenTomatoes = rt;
-        }
-      } catch (err) {
-        console.warn('OMDb fail', (err as any)?.message);
-      }
+        if (o?.Response === 'True') applyOmdb(o);
+      } catch {/* ignore and fall back */}
+    }
+
+    // 2) Fallback by title/year IF we still have no ratings
+    if (OMDB_KEY && !imdbRating && !rottenTomatoes) {
+      try {
+        const o2 = await omdbFindByCandidates(candidates, year, OMDB_KEY);
+        if (o2) applyOmdb(o2);
+      } catch {/* ignore */}
     }
 
     const details: DetailResult = {
       tmdbId,
       imdbId,
-      title: t.title || t.original_title || '—',
-      year: (t.release_date || '').slice(0, 4) || '—',
+      title: rawTitle || '—',
+      year: year || '—',
       genres: Array.isArray(t.genres) ? t.genres.map((g: any) => g.name) : [],
       poster: t.poster_path ? tmdbImageUrl(t.poster_path, 'w500') : null,
       plot: t.overview || null,
       imdbRating,
       rottenTomatoes,
-      // friendly bits:
-      releaseDate: t?.release_date || null,
-      countries: Array.isArray(t?.production_countries) ? t.production_countries.map((c: any) => c.iso_3166_1) : [],
       links: {
         imdb: imdbId ? `https://www.imdb.com/title/${imdbId}/` : undefined,
-        rottenTomatoesSearch: `https://www.rottentomatoes.com/search?search=${encodeURIComponent(t.title || '')}`,
+        rottenTomatoesSearch: `https://www.rottentomatoes.com/search?search=${encodeURIComponent(rawTitle)}`,
       },
     };
 
-    lru.set(cacheKey, details, 15 * 60_000);
-    return NextResponse.json(details, { status: 200, headers: noStore() });
+    // Send no-store so we never cache a temporary “N/A”
+    return NextResponse.json(details, {
+      status: 200,
+      headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0' },
+    });
   } catch (e: any) {
-    console.error('details error', e?.message);
-    return NextResponse.json({ error: e?.message || 'Details failed' }, { status: 500, headers: noStore() });
+    return NextResponse.json({ error: e?.message || 'Details failed' }, { status: 500 });
   }
 }
 
-function noStore() {
-  return {
-    'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
-    Pragma: 'no-cache',
-    Expires: '0',
-    Vary: '*',
-  };
+/** Heuristics to turn messy titles into movie title candidates for OMDb. */
+function buildTitleCandidates(...titles: Array<string | undefined>) {
+  const set = new Set<string>();
+
+  for (const raw of titles) {
+    if (!raw) continue;
+    const base = raw.trim();
+
+    // 1) Add as-is
+    push(base);
+
+    // 2) Strip bracketed parts
+    push(base.replace(/\s*[\(\[\{].*?[\)\]\}]\s*/g, ' ').replace(/\s{2,}/g, ' ').trim());
+
+    // 3) If contains “from 'X'” or “from “X””, add X
+    const fromMatch = base.match(/from\s+['"]([^'"]+)['"]/i);
+    if (fromMatch?.[1]) push(fromMatch[1].trim());
+
+    // 4) Split on dashes/colons and try parts (both sides)
+    for (const part of base.split(/[:\-–—]\s*/)) {
+      if (part) push(part.trim());
+    }
+
+    // 5) Remove common noise words (music video / song / trailer etc.)
+    push(
+      base
+        .toLowerCase()
+        .replace(/\b(official|full|video|song|lyric|lyrical|audio|remix|trailer|teaser|promo|4k|hdr|feat\.?|ft\.?)\b/gi, '')
+        .replace(/\s{2,}/g, ' ')
+        .trim()
+    );
+  }
+
+  // Clean + uniq, drop tiny strings
+  return Array.from(set).filter((s) => s && s.length > 2);
+
+  function push(s: string) {
+    const v = (s || '').trim();
+    if (v) set.add(v);
+  }
 }

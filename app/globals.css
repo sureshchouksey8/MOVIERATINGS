@@ -6,12 +6,9 @@
 html, body { height: 100%; }
 body { @apply bg-gradient-to-br from-slate-900 via-indigo-900 to-black text-slate-100; }
 
-/* ——— brand rainbow text ——— */
+/* animated rainbow text for the brand line */
 .rainbow-text {
-  background: linear-gradient(
-    90deg,
-    #a3e635, #22d3ee, #60a5fa, #c084fc, #f472b6, #f59e0b, #a3e635
-  );
+  background: linear-gradient(90deg,#a3e635,#22d3ee,#60a5fa,#c084fc,#f472b6,#f59e0b,#a3e635);
   background-size: 200% 200%;
   -webkit-background-clip: text;
   background-clip: text;

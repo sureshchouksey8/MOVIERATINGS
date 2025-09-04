@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { tmdbMovieDetails, tmdbImageUrl } from '@/lib/tmdb';
-import { omdbByImdbId, omdbFindByCandidates, imdbRatingFromHtml } from '@/lib/omdb';
+import { omdbByImdbId } from '@/lib/omdb';
 import type { DetailResult } from '@/lib/types';
 
 export const runtime = 'nodejs';
@@ -8,67 +8,39 @@ export const runtime = 'nodejs';
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const tmdbId = Number(searchParams.get('tmdbId') || '');
-  if (!tmdbId) return NextResponse.json({ error: 'tmdbId required' }, { status: 400, headers: noStore() });
+  if (!tmdbId) return NextResponse.json({ error: 'tmdbId required' }, { status: 400 });
 
   const TMDB_KEY = process.env.TMDB_KEY;
-  const OMDB_KEY = process.env.OMDB_KEY || '';
-  if (!TMDB_KEY) return NextResponse.json({ error: 'Server missing TMDB_KEY' }, { status: 500, headers: noStore() });
+  const OMDB_KEY = process.env.OMDB_KEY; // optional
+  if (!TMDB_KEY) return NextResponse.json({ error: 'Server missing TMDB_KEY' }, { status: 500 });
 
   try {
     const t = await tmdbMovieDetails(tmdbId, TMDB_KEY);
-    const title = t.title || t.original_title || '';
-    const year = (t.release_date || '').slice(0, 4) || null;
+    const imdbId: string | null = t?.external_ids?.imdb_id || null;
 
-    let imdbId: string | null = t?.external_ids?.imdb_id || null;
     let imdbRating: string | null = null;
     let rottenTomatoes: string | null = null;
 
-    // 1) OMDb via imdbId
-    if (OMDB_KEY && imdbId) {
+    if (imdbId && OMDB_KEY) {
       try {
         const o = await omdbByImdbId(imdbId, OMDB_KEY);
-        if (o?.Response === 'True') {
-          if (o?.imdbRating && o.imdbRating !== 'N/A') imdbRating = `${o.imdbRating}/10`;
-          else if (Array.isArray(o?.Ratings)) {
-            const v = o.Ratings.find((r: any) => String(r.Source).toLowerCase().includes('internet movie database'))?.Value;
-            if (v) imdbRating = v;
-          }
-          if (Array.isArray(o?.Ratings)) {
-            const rt = o.Ratings.find((r: any) => String(r.Source).toLowerCase().includes('rotten'))?.Value;
-            if (rt) rottenTomatoes = rt;
-          }
+        if (o?.imdbRating && o.imdbRating !== 'N/A') imdbRating = `${o.imdbRating}/10`;
+        else if (Array.isArray(o?.Ratings)) {
+          const imdbFromRatings = o.Ratings.find((r: any) =>
+            String(r.Source).toLowerCase().includes('internet movie database')
+          )?.Value;
+          if (imdbFromRatings) imdbRating = imdbFromRatings;
         }
-      } catch { /* continue */ }
-    }
-
-    // 2) IMDb JSON-LD scrape if needed
-    if (!imdbRating && imdbId) {
-      const scraped = await imdbRatingFromHtml(imdbId);
-      if (scraped) imdbRating = scraped;
-    }
-
-    // 3) OMDb by title/year (smart candidates)
-    if (OMDB_KEY && (!imdbId || (!imdbRating && !rottenTomatoes))) {
-      try {
-        const o2 = await omdbFindByCandidates(buildTitleCandidates(title, t?.original_title, t?.tagline), year, OMDB_KEY);
-        if (o2) {
-          if (!imdbId && o2.imdbID) imdbId = o2.imdbID;
-          if (!imdbRating) {
-            if (o2?.imdbRating && o2.imdbRating !== 'N/A') imdbRating = `${o2.imdbRating}/10`;
-            else if (Array.isArray(o2?.Ratings)) {
-              const v = o2.Ratings.find((r: any) => String(r.Source).toLowerCase().includes('internet movie database'))?.Value;
-              if (v) imdbRating = v;
-            }
-          }
-          if (!rottenTomatoes && Array.isArray(o2?.Ratings)) {
-            const rt = o2.Ratings.find((r: any) => String(r.Source).toLowerCase().includes('rotten'))?.Value;
-            if (rt) rottenTomatoes = rt;
-          }
+        if (Array.isArray(o?.Ratings)) {
+          const rt = o.Ratings.find((r: any) =>
+            String(r.Source).toLowerCase().includes('rotten')
+          )?.Value;
+          if (rt) rottenTomatoes = rt;
         }
       } catch { /* ignore */ }
     }
 
-    // Trailer selection
+    // ---------- Trailer selection ----------
     let trailerKey: string | undefined;
     const vids = Array.isArray(t?.videos?.results) ? t.videos.results : [];
     if (vids.length) {
@@ -85,6 +57,8 @@ export async function GET(req: Request) {
         });
       trailerKey = sorted[0]?.key;
     }
+    const title = t.title || t.original_title || '';
+    const year = (t.release_date || '').slice(0, 4) || '';
     const query = encodeURIComponent(`${title} ${year || ''} official trailer`.trim());
 
     const details: DetailResult = {
@@ -102,43 +76,27 @@ export async function GET(req: Request) {
         rottenTomatoesSearch: `https://www.rottentomatoes.com/search?search=${encodeURIComponent(title)}`,
       },
       trailer: trailerKey
-        ? { youtubeKey: trailerKey, youtubeUrl: `https://www.youtube.com/watch?v=${trailerKey}`, embedUrl: `https://www.youtube.com/embed/${trailerKey}` }
-        : { searchEmbedUrl: `https://www.youtube.com/embed?listType=search&list=${query}` },
+        ? {
+            youtubeKey: trailerKey,
+            youtubeUrl: `https://www.youtube.com/watch?v=${trailerKey}`,
+            embedUrl: `https://www.youtube.com/embed/${trailerKey}`,
+            // also give a search-embed as a backup
+            searchEmbedUrl: `https://www.youtube.com/embed?listType=search&list=${query}`,
+          }
+        : {
+            // no key? use YT search-embed which plays the top result
+            searchEmbedUrl: `https://www.youtube.com/embed?listType=search&list=${query}`,
+          },
     };
 
-    return NextResponse.json(details, { status: 200, headers: noStore() });
+    return NextResponse.json(details, { status: 200, headers: cacheHeaders(86400) });
   } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'Details failed' }, { status: 500, headers: noStore() });
+    return NextResponse.json({ error: e?.message || 'Details failed' }, { status: 500 });
   }
 }
 
-function noStore() {
+function cacheHeaders(seconds: number) {
   return {
-    'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
-    Pragma: 'no-cache',
-    Expires: '0',
-    Vary: '*',
+    'Cache-Control': `s-maxage=${seconds}, stale-while-revalidate=${Math.max(60, seconds)}`,
   };
-}
-
-function buildTitleCandidates(...titles: Array<string | undefined>) {
-  const set = new Set<string>();
-  for (const raw of titles) {
-    if (!raw) continue;
-    const base = raw.trim();
-    push(base);
-    push(base.replace(/\s*[\(\[\{].*?[\)\]\}]\s*/g, ' ').replace(/\s{2,}/g, ' ').trim());
-    const fromMatch = base.match(/from\s+['"]([^'"]+)['"]/i);
-    if (fromMatch?.[1]) push(fromMatch[1].trim());
-    for (const part of base.split(/[:\-–—]\s*/)) if (part) push(part.trim());
-    push(
-      base
-        .toLowerCase()
-        .replace(/\b(official|full|video|song|lyric|lyrical|audio|remix|trailer|teaser|promo|4k|hdr|feat\.?|ft\.?)\b/gi, '')
-        .replace(/\s{2,}/g, ' ')
-        .trim()
-    );
-  }
-  return Array.from(set).filter((s) => s && s.length > 2);
-  function push(s: string) { const v = (s || '').trim(); if (v) set.add(v); }
 }

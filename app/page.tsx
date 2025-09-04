@@ -3,6 +3,8 @@ import React, { useState } from 'react';
 import SearchBar from '@/components/SearchBar';
 import { RatingBadge } from '@/components/RatingBadge';
 import TrailerBlock from '@/components/TrailerBlock';
+import BrandMark from '@/components/BrandMark';
+import ShareButton from '@/components/ShareButton';
 
 export default function Page() {
   const [detail, setDetail] = useState<any>(null);
@@ -30,7 +32,7 @@ export default function Page() {
           <h1 className="text-3xl font-semibold tracking-tight">Movie Ratings Finder</h1>
           <p className="text-sm text-slate-300">Type → pick a movie → see ratings. Use ✕ to clear.</p>
         </div>
-        <div className="text-xs text-slate-400">This product uses the TMDb API but is not endorsed by TMDb.</div>
+        <BrandMark />
       </header>
 
       <section className="mt-6 rounded-2xl border border-slate-700/50 bg-slate-900/60 p-4 shadow-xl backdrop-blur">
@@ -38,7 +40,6 @@ export default function Page() {
         {error && <p className="mt-3 text-sm text-rose-300">{error}</p>}
       </section>
 
-      {/* Render results ONLY after a movie is selected */}
       {detail && (
         <section className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
           <div className="lg:col-span-1">
@@ -56,6 +57,8 @@ export default function Page() {
                     {detail.year} {detail.genres?.length ? <>• <span>{detail.genres.join(', ')}</span></> : null}
                   </p>
                   {detail.plot && <p className="mt-2 text-sm leading-relaxed text-slate-200/90">{detail.plot}</p>}
+                  {/* Share button */}
+                  <ShareButton detail={detail} />
                 </div>
               </div>
             </div>
@@ -69,7 +72,6 @@ export default function Page() {
                 <RatingBadge label="Rotten Tomatoes" value={detail?.rottenTomatoes || null} href={detail?.links?.rottenTomatoesSearch} />
               </div>
 
-              {/* Trailer */}
               {detail?.trailer && (
                 <div className="mt-4">
                   <TrailerBlock title={detail.title} year={detail.year} trailer={detail.trailer} />

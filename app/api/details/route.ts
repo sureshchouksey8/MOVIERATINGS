@@ -4,8 +4,6 @@ import { omdbByImdbId, omdbFindByCandidates, imdbRatingFromHtml } from '@/lib/om
 import type { DetailResult } from '@/lib/types';
 
 export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -25,30 +23,55 @@ export async function GET(req: Request) {
     let imdbRating: string | null = null;
     let rottenTomatoes: string | null = null;
 
+<<<<<<< HEAD
+    // ---- Ratings path 1: OMDb via imdbId
+=======
     // ---------- Ratings (robust tri-path) ----------
     // 1) OMDb by imdbId
+>>>>>>> 45b4f786ff96d024261973ad06b1a6942f078547
     if (OMDB_KEY && imdbId) {
       try {
         const o = await omdbByImdbId(imdbId, OMDB_KEY);
         if (o?.Response === 'True') {
           if (o?.imdbRating && o.imdbRating !== 'N/A') imdbRating = `${o.imdbRating}/10`;
           else if (Array.isArray(o?.Ratings)) {
+<<<<<<< HEAD
+            const v = o.Ratings.find((r: any) =>
+              String(r.Source).toLowerCase().includes('internet movie database')
+            )?.Value;
+            if (v) imdbRating = v;
+=======
             const v = o.Ratings.find((r: any) => String(r.Source).toLowerCase().includes('internet movie database'))?.Value;
             if (v) imdbRating = v;
+>>>>>>> 45b4f786ff96d024261973ad06b1a6942f078547
           }
           if (Array.isArray(o?.Ratings)) {
             const rt = o.Ratings.find((r: any) => String(r.Source).toLowerCase().includes('rotten'))?.Value;
             if (rt) rottenTomatoes = rt;
           }
         }
+<<<<<<< HEAD
+      } catch { /* continue */ }
+=======
       } catch {/* continue */}
+>>>>>>> 45b4f786ff96d024261973ad06b1a6942f078547
     }
+<<<<<<< HEAD
+
+    // ---- Ratings path 2: IMDb JSON-LD scrape (when imdbId exists but OMDb lacks rating)
+=======
     // 2) If still no IMDb rating and we DO have imdbId, scrape IMDb JSON-LD
+>>>>>>> 45b4f786ff96d024261973ad06b1a6942f078547
     if (!imdbRating && imdbId) {
       const scraped = await imdbRatingFromHtml(imdbId);
       if (scraped) imdbRating = scraped;
     }
+<<<<<<< HEAD
+
+    // ---- Ratings path 3: OMDb by title/year with smart candidates (when no imdbId or still missing)
+=======
     // 3) If no imdbId or still missing ratings, OMDb by smart title/year candidates
+>>>>>>> 45b4f786ff96d024261973ad06b1a6942f078547
     if (OMDB_KEY && (!imdbId || (!imdbRating && !rottenTomatoes))) {
       try {
         const o2 = await omdbFindByCandidates(buildTitleCandidates(title, t?.original_title, t?.tagline), year, OMDB_KEY);
@@ -57,8 +80,15 @@ export async function GET(req: Request) {
           if (!imdbRating) {
             if (o2?.imdbRating && o2.imdbRating !== 'N/A') imdbRating = `${o2.imdbRating}/10`;
             else if (Array.isArray(o2?.Ratings)) {
+<<<<<<< HEAD
+              const v = o2.Ratings.find((r: any) =>
+                String(r.Source).toLowerCase().includes('internet movie database')
+              )?.Value;
+              if (v) imdbRating = v;
+=======
               const v = o2.Ratings.find((r: any) => String(r.Source).toLowerCase().includes('internet movie database'))?.Value;
               if (v) imdbRating = v;
+>>>>>>> 45b4f786ff96d024261973ad06b1a6942f078547
             }
           }
           if (!rottenTomatoes && Array.isArray(o2?.Ratings)) {
@@ -69,6 +99,28 @@ export async function GET(req: Request) {
       } catch {/* ignore */}
     }
 
+<<<<<<< HEAD
+    // ---- Trailer selection
+    let trailerKey: string | undefined;
+    const vids = Array.isArray(t?.videos?.results) ? t.videos.results : [];
+    if (vids.length) {
+      const sorted = [...vids]
+        .filter((v: any) => v.site === 'YouTube' && (v.type === 'Trailer' || v.type === 'Teaser'))
+        .sort((a: any, b: any) => {
+          const score = (x: any) =>
+            (x.official ? 2 : 0) +
+            (String(x.name || '').toLowerCase().includes('official trailer') ? 3 : 0) +
+            (x.type === 'Trailer' ? 1 : 0);
+          const sA = score(a), sB = score(b);
+          if (sB !== sA) return sB - sA;
+          return new Date(b.published_at || 0).getTime() - new Date(a.published_at || 0).getTime();
+        });
+      trailerKey = sorted[0]?.key;
+    }
+
+    const query = encodeURIComponent(`${title} ${year || ''} official trailer`.trim());
+
+=======
     // ---------- Trailer selection ----------
     let trailerKey: string | undefined;
     const vids = Array.isArray(t?.videos?.results) ? t.videos.results : [];
@@ -88,6 +140,7 @@ export async function GET(req: Request) {
     }
 
     const query = encodeURIComponent(`${title} ${year || ''} official trailer`.trim());
+>>>>>>> 45b4f786ff96d024261973ad06b1a6942f078547
     const details: DetailResult = {
       tmdbId,
       imdbId,
@@ -102,6 +155,17 @@ export async function GET(req: Request) {
         imdb: imdbId ? `https://www.imdb.com/title/${imdbId}/` : undefined,
         rottenTomatoesSearch: `https://www.rottentomatoes.com/search?search=${encodeURIComponent(title)}`,
       },
+<<<<<<< HEAD
+      trailer: trailerKey
+        ? {
+            youtubeKey: trailerKey,
+            youtubeUrl: `https://www.youtube.com/watch?v=${trailerKey}`,
+            embedUrl: `https://www.youtube.com/embed/${trailerKey}`,
+          }
+        : {
+            searchEmbedUrl: `https://www.youtube.com/embed?listType=search&list=${query}`,
+          },
+=======
       trailer: trailerKey
         ? {
             youtubeKey: trailerKey,
@@ -112,6 +176,7 @@ export async function GET(req: Request) {
             // no key? use YT search-embed which plays the top result
             searchEmbedUrl: `https://www.youtube.com/embed?listType=search&list=${query}`,
           },
+>>>>>>> 45b4f786ff96d024261973ad06b1a6942f078547
     };
 
     return NextResponse.json(details, { status: 200, headers: noStore() });

@@ -20,7 +20,7 @@ export async function omdbSearch(title: string, key: string) {
   return res.json();
 }
 
-/** Try exact title(s) first, then search, and return a full OMDb record. */
+/** Try exact title(s), then search; returns a full OMDb record. */
 export async function omdbFindByCandidates(candidates: string[], year: string | null | undefined, key: string) {
   for (const t of candidates) {
     const r = await omdbByTitleExact(t, year, key);
@@ -50,39 +50,30 @@ export async function omdbFindByCandidates(candidates: string[], year: string | 
   return null;
 }
 
-/** Fallback: scrape IMDb title page JSON-LD for aggregateRating.ratingValue */
+/** Fallback: parse IMDb title page JSON-LD for aggregateRating.ratingValue. */
 export async function imdbRatingFromHtml(imdbId: string): Promise<string | null> {
   try {
     const url = `https://www.imdb.com/title/${imdbId}/`;
     const res = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0',
-        'Accept-Language': 'en-US,en;q=0.9',
-      },
-      // don’t cache a bad page
+      headers: { 'User-Agent': 'Mozilla/5.0', 'Accept-Language': 'en-US,en;q=0.9' },
       cache: 'no-store' as RequestCache,
     });
     if (!res.ok) return null;
     const html = await res.text();
-    // find JSON-LD blocks
-    const scripts = [...html.matchAll(/<script[^>]+type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi)];
-    for (const m of scripts) {
+
+    const blocks = [...html.matchAll(/<script[^>]+type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi)];
+    for (const m of blocks) {
       const raw = (m[1] || '').trim();
       try {
         const json = JSON.parse(raw);
-        // Some pages have an array of nodes
         const nodes = Array.isArray(json) ? json : [json];
         for (const node of nodes) {
           const rating = node?.aggregateRating?.ratingValue;
-          if (rating && !Number.isNaN(Number(rating))) {
-            return `${Number(rating).toFixed(1)}/10`;
-          }
+          if (rating && !Number.isNaN(Number(rating))) return `${Number(rating).toFixed(1)}/10`;
         }
-      } catch {
-        // ignore bad JSON-LD chunks
-      }
+      } catch { /* ignore chunk */ }
     }
-    // fallback: try to catch ratingValue in inline JSON
+
     const m2 = html.match(/"aggregateRating":\s*\{[^}]*"ratingValue":\s*("?)(\d+(\.\d+)?)\1/);
     if (m2) return `${Number(m2[2]).toFixed(1)}/10`;
     return null;

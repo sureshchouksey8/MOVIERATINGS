@@ -7,7 +7,7 @@ const TMDB = {
 export async function tmdbSearchMovies(q: string, key: string) {
   const url = `${TMDB.base}/search/movie?query=${encodeURIComponent(q)}&include_adult=false&language=en-US&page=1`;
   const headers: Record<string, string> = {};
-  if (key.startsWith('ey')) headers.Authorization = `Bearer ${key}`; // v4 token
+  if (key.startsWith('ey')) headers.Authorization = `Bearer ${key}`; // v4 token only
   const res = await fetch(url, { headers });
 
   if (res.status === 401 || res.status === 404) {
@@ -20,10 +20,10 @@ export async function tmdbSearchMovies(q: string, key: string) {
 }
 
 export async function tmdbMovieDetails(tmdbId: number, key: string) {
-  // ask for videos so we can embed an official trailer
+  // NOTE: add "videos" so we can pick an official trailer
   const baseUrl = `${TMDB.base}/movie/${tmdbId}?append_to_response=external_ids,videos`;
   const headers: Record<string, string> = {};
-  if (key.startsWith('ey')) headers.Authorization = `Bearer ${key}`; // v4 token
+  if (key.startsWith('ey')) headers.Authorization = `Bearer ${key}`; // v4 token only
   const res = await fetch(baseUrl, { headers });
 
   if (res.status === 401 || res.status === 404) {

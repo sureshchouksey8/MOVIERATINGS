@@ -13,8 +13,8 @@ export type DetailResult = {
   genres: string[];
   poster: string | null; // full URL
   plot: string | null;
-  imdbRating: string | null;      // e.g., "8.5/10" or null if missing
-  rottenTomatoes: string | null;  // e.g., "94%" or null if missing
+  imdbRating: string | null;      // e.g., "8.5/10"
+  rottenTomatoes: string | null;  // e.g., "94%"
   links: {
     imdb?: string;
     rottenTomatoesSearch?: string;
@@ -23,6 +23,6 @@ export type DetailResult = {
     youtubeKey?: string;
     youtubeUrl?: string;     // https://www.youtube.com/watch?v=<key>
     embedUrl?: string;       // https://www.youtube.com/embed/<key>
-    searchEmbedUrl?: string; // https://www.youtube.com/embed?listType=search&list=...
+    searchEmbedUrl?: string; // search fallback that plays top result
   };
 };

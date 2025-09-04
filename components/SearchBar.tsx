@@ -2,8 +2,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 
 export default function SearchBar({
-  onSelect,
-  onClearSelection,
+  onSelect, onClearSelection,
 }: {
   onSelect: (tmdbId: number) => void;
   onClearSelection?: () => void;
@@ -17,12 +16,8 @@ export default function SearchBar({
 
   useEffect(() => {
     const term = q.trim();
-
     if (term.length < 2) {
-      setResults([]);
-      setOpen(false);
-      setLoading(false);
-      return;
+      setResults([]); setOpen(false); setLoading(false); return;
     }
 
     const seq = ++querySeq.current;
@@ -38,29 +33,15 @@ export default function SearchBar({
       headers: { 'x-no-cache': String(bust) },
     })
       .then(async (r) => r.json())
-      .then((j) => {
-        if (seq === querySeq.current) {
-          setResults(j.results || []);
-          setOpen(true);
-        }
-      })
-      .catch((err) => {
-        if (err?.name !== 'AbortError') {
-          // optional: surface error state
-        }
-      })
-      .finally(() => {
-        if (seq === querySeq.current) setLoading(false);
-      });
+      .then((j) => { if (seq === querySeq.current) { setResults(j.results || []); setOpen(true); } })
+      .catch((err) => { if (err?.name !== 'AbortError') {/* ignore */} })
+      .finally(() => { if (seq === querySeq.current) setLoading(false); });
 
     return () => ctrl.abort();
   }, [q]);
 
   function clearAll() {
-    setQ('');
-    setResults([]);
-    setOpen(false);
-    onClearSelection?.();
+    setQ(''); setResults([]); setOpen(false); onClearSelection?.();
   }
 
   return (
@@ -70,9 +51,7 @@ export default function SearchBar({
         placeholder="Search any movie…"
         value={q}
         onChange={(e) => setQ(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Escape') clearAll();
-        }}
+        onKeyDown={(e) => { if (e.key === 'Escape') clearAll(); }}
         onFocus={() => { if (results.length >= 1) setOpen(true); }}
       />
       <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">🔎</span>

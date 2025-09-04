@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import SearchBar from '@/components/SearchBar';
 import { RatingBadge } from '@/components/RatingBadge';
-import BrandMark from '@/components/BrandMark';
+import TrailerBlock from '@/components/TrailerBlock';
 
 export default function Page() {
   const [detail, setDetail] = useState<any>(null);
@@ -25,12 +25,12 @@ export default function Page() {
 
   return (
     <div className="mx-auto max-w-6xl px-4 pb-24 pt-12">
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <header className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">Movie Ratings Finder</h1>
           <p className="text-sm text-slate-300">Type → pick a movie → see ratings. Use ✕ to clear.</p>
         </div>
-        <BrandMark />
+        <div className="text-xs text-slate-400">This product uses the TMDb API but is not endorsed by TMDb.</div>
       </header>
 
       <section className="mt-6 rounded-2xl border border-slate-700/50 bg-slate-900/60 p-4 shadow-xl backdrop-blur">
@@ -68,6 +68,13 @@ export default function Page() {
                 <RatingBadge label="IMDb" value={detail?.imdbRating || null} href={detail?.links?.imdb} />
                 <RatingBadge label="Rotten Tomatoes" value={detail?.rottenTomatoes || null} href={detail?.links?.rottenTomatoesSearch} />
               </div>
+
+              {/* Trailer */}
+              {detail?.trailer && (
+                <div className="mt-4">
+                  <TrailerBlock title={detail.title} year={detail.year} trailer={detail.trailer} />
+                </div>
+              )}
             </div>
           </div>
         </section>

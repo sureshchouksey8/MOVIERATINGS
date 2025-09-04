@@ -3,6 +3,8 @@ import { tmdbSearchMovies, tmdbImageUrl } from '@/lib/tmdb';
 import type { SearchResult } from '@/lib/types';
 
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);

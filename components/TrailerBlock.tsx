@@ -17,7 +17,7 @@ export default function TrailerBlock({
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-2">
+      <div className="mb-2 flex items-center justify-between">
         <div className="text-xs uppercase tracking-wide text-slate-400">
           Trailer{useAlt ? ' (alternate)' : trailer?.embedUrl ? '' : ' (best match)'}
         </div>

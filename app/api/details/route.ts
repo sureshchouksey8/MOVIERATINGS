@@ -1,35 +1,40 @@
 import { NextResponse } from 'next/server';
 import { tmdbMovieDetails, tmdbImageUrl } from '@/lib/tmdb';
-import { omdbByImdbId } from '@/lib/omdb';
+import { omdbByImdbId, omdbByTitleYear } from '@/lib/omdb';
 import type { DetailResult } from '@/lib/types';
 
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const tmdbId = Number(searchParams.get('tmdbId') || '');
-  if (!tmdbId) return NextResponse.json({ error: 'tmdbId required' }, { status: 400 });
+  if (!tmdbId) return NextResponse.json({ error: 'tmdbId required' }, { status: 400, headers: noStore() });
 
   const TMDB_KEY = process.env.TMDB_KEY;
   const OMDB_KEY = process.env.OMDB_KEY; // optional
-  if (!TMDB_KEY) return NextResponse.json({ error: 'Server missing TMDB_KEY' }, { status: 500 });
+  if (!TMDB_KEY) return NextResponse.json({ error: 'Server missing TMDB_KEY' }, { status: 500, headers: noStore() });
 
   try {
     const t = await tmdbMovieDetails(tmdbId, TMDB_KEY);
+    const title = t.title || t.original_title || '';
+    const year = (t.release_date || '').slice(0, 4) || '';
     const imdbId: string | null = t?.external_ids?.imdb_id || null;
 
     let imdbRating: string | null = null;
     let rottenTomatoes: string | null = null;
 
-    if (imdbId && OMDB_KEY) {
+    // 1) OMDb by imdbId
+    if (OMDB_KEY && imdbId) {
       try {
         const o = await omdbByImdbId(imdbId, OMDB_KEY);
         if (o?.imdbRating && o.imdbRating !== 'N/A') imdbRating = `${o.imdbRating}/10`;
         else if (Array.isArray(o?.Ratings)) {
-          const imdbFromRatings = o.Ratings.find((r: any) =>
+          const v = o.Ratings.find((r: any) =>
             String(r.Source).toLowerCase().includes('internet movie database')
           )?.Value;
-          if (imdbFromRatings) imdbRating = imdbFromRatings;
+          if (v) imdbRating = v;
         }
         if (Array.isArray(o?.Ratings)) {
           const rt = o.Ratings.find((r: any) =>
@@ -37,10 +42,34 @@ export async function GET(req: Request) {
           )?.Value;
           if (rt) rottenTomatoes = rt;
         }
-      } catch { /* ignore */ }
+      } catch {/* ignore */}
     }
 
-    // ---------- Trailer selection ----------
+    // 2) If still missing, OMDb by title/year
+    if (OMDB_KEY && (!imdbRating || !rottenTomatoes)) {
+      try {
+        const o2 = await omdbByTitleYear(title, year || undefined, OMDB_KEY);
+        if (o2?.Response === 'True') {
+          if (!imdbRating) {
+            if (o2?.imdbRating && o2.imdbRating !== 'N/A') imdbRating = `${o2.imdbRating}/10`;
+            else if (Array.isArray(o2?.Ratings)) {
+              const v = o2.Ratings.find((r: any) =>
+                String(r.Source).toLowerCase().includes('internet movie database')
+              )?.Value;
+              if (v) imdbRating = v;
+            }
+          }
+          if (!rottenTomatoes && Array.isArray(o2?.Ratings)) {
+            const rt = o2.Ratings.find((r: any) =>
+              String(r.Source).toLowerCase().includes('rotten')
+            )?.Value;
+            if (rt) rottenTomatoes = rt;
+          }
+        }
+      } catch {/* ignore */}
+    }
+
+    // 3) Trailer pick (YouTube official → fallback to search-embed)
     let trailerKey: string | undefined;
     const vids = Array.isArray(t?.videos?.results) ? t.videos.results : [];
     if (vids.length) {
@@ -57,9 +86,7 @@ export async function GET(req: Request) {
         });
       trailerKey = sorted[0]?.key;
     }
-    const title = t.title || t.original_title || '';
-    const year = (t.release_date || '').slice(0, 4) || '';
-    const query = encodeURIComponent(`${title} ${year || ''} official trailer`.trim());
+    const ytQuery = encodeURIComponent(`${title} ${year || ''} official trailer`.trim());
 
     const details: DetailResult = {
       tmdbId,
@@ -80,23 +107,19 @@ export async function GET(req: Request) {
             youtubeKey: trailerKey,
             youtubeUrl: `https://www.youtube.com/watch?v=${trailerKey}`,
             embedUrl: `https://www.youtube.com/embed/${trailerKey}`,
-            // also give a search-embed as a backup
-            searchEmbedUrl: `https://www.youtube.com/embed?listType=search&list=${query}`,
+            searchEmbedUrl: `https://www.youtube.com/embed?listType=search&list=${ytQuery}`,
           }
         : {
-            // no key? use YT search-embed which plays the top result
-            searchEmbedUrl: `https://www.youtube.com/embed?listType=search&list=${query}`,
+            searchEmbedUrl: `https://www.youtube.com/embed?listType=search&list=${ytQuery}`,
           },
     };
 
-    return NextResponse.json(details, { status: 200, headers: cacheHeaders(86400) });
+    return NextResponse.json(details, { status: 200, headers: noStore() });
   } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'Details failed' }, { status: 500 });
+    return NextResponse.json({ error: e?.message || 'Details failed' }, { status: 500, headers: noStore() });
   }
 }
 
-function cacheHeaders(seconds: number) {
-  return {
-    'Cache-Control': `s-maxage=${seconds}, stale-while-revalidate=${Math.max(60, seconds)}`,
-  };
+function noStore() {
+  return { 'Cache-Control': 'no-store, no-cache, must-revalidate' };
 }

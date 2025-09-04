@@ -4,25 +4,31 @@ import { omdbByImdbId } from '@/lib/omdb';
 import { Resvg } from '@resvg/resvg-js';
 
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const tmdbId = Number(searchParams.get('tmdbId') || '');
-    if (!tmdbId) return NextResponse.json({ error: 'tmdbId required' }, { status: 400 });
+    if (!tmdbId) {
+      return NextResponse.json({ error: 'tmdbId required' }, { status: 400 });
+    }
 
     const TMDB_KEY = process.env.TMDB_KEY;
     const OMDB_KEY = process.env.OMDB_KEY || '';
-    if (!TMDB_KEY) return NextResponse.json({ error: 'Server missing TMDB_KEY' }, { status: 500 });
+    if (!TMDB_KEY) {
+      return NextResponse.json({ error: 'Server missing TMDB_KEY' }, { status: 500 });
+    }
 
-    // fetch details
+    // Fetch details
     const t = await tmdbMovieDetails(tmdbId, TMDB_KEY);
     const title = t.title || t.original_title || '—';
     const year = (t.release_date || '').slice(0, 4) || '—';
     const imdbId: string | null = t?.external_ids?.imdb_id || null;
     const posterUrl = t.poster_path ? tmdbImageUrl(t.poster_path, 'w500') : '';
 
-    // ratings (IMDb via OMDb if possible)
+    // Ratings (IMDb via OMDb if possible)
     let imdbRating: string | null = null;
     let rotten: string | null = null;
     if (OMDB_KEY && imdbId) {
@@ -30,13 +36,17 @@ export async function GET(req: Request) {
         const o = await omdbByImdbId(imdbId, OMDB_KEY);
         if (o?.imdbRating && o.imdbRating !== 'N/A') imdbRating = `${o.imdbRating}/10`;
         if (Array.isArray(o?.Ratings)) {
-          const rt = o.Ratings.find((r: any) => String(r.Source).toLowerCase().includes('rotten'))?.Value;
+          const rt = o.Ratings.find((r: any) =>
+            String(r.Source).toLowerCase().includes('rotten')
+          )?.Value;
           if (rt) rotten = rt;
         }
-      } catch {/* ignore */}
+      } catch {
+        // ignore OMDb errors; keep going
+      }
     }
 
-    // fetch poster binary & embed as data URI for SVG
+    // Fetch poster binary & embed as data URI
     let posterDataUri = '';
     if (posterUrl) {
       try {
@@ -44,10 +54,12 @@ export async function GET(req: Request) {
         const buf = Buffer.from(await imgRes.arrayBuffer());
         const b64 = buf.toString('base64');
         posterDataUri = `data:image/jpeg;base64,${b64}`;
-      } catch {/* ignore missing poster */}
+      } catch {
+        // ignore poster fetch failures
+      }
     }
 
-    // simple SVG card (1200x630) — dark gradient, poster, title, ratings, brand line
+    // SVG card (1200x630)
     const svg = `
       <svg width="1200" height="630" viewBox="0 0 1200 630" xmlns="http://www.w3.org/2000/svg">
         <defs>
@@ -56,31 +68,24 @@ export async function GET(req: Request) {
             <stop stop-color="#1e1b4b" offset="50%"/>
             <stop stop-color="#000000" offset="100%"/>
           </linearGradient>
+          <clipPath id="r"><rect x="64" y="64" width="360" height="540" rx="24"/></clipPath>
         </defs>
         <rect width="1200" height="630" fill="url(#g)"/>
-        ${posterDataUri ? `
-          <image href="${posterDataUri}" x="64" y="64" width="360" height="540" preserveAspectRatio="xMidYMid slice" clip-path="url(#r)"/>
-          <defs>
-            <clipPath id="r"><rect x="64" y="64" width="360" height="540" rx="24"/></clipPath>
-          </defs>
-        ` : `
-          <rect x="64" y="64" width="360" height="540" rx="24" fill="#0b1020" stroke="#1f2a44" stroke-width="2"/>
-          <text x="244" y="340" text-anchor="middle" fill="#94a3b8" font-family="Inter, system-ui, -apple-system, Segoe UI, Roboto" font-size="22">No Poster</text>
-        `}
+        ${posterDataUri
+          ? `<image href="${posterDataUri}" x="64" y="64" width="360" height="540" preserveAspectRatio="xMidYMid slice" clip-path="url(#r)"/>`
+          : `<rect x="64" y="64" width="360" height="540" rx="24" fill="#0b1020" stroke="#1f2a44" stroke-width="2"/>
+             <text x="244" y="340" text-anchor="middle" fill="#94a3b8" font-family="Inter, system-ui, -apple-system, Segoe UI, Roboto" font-size="22">No Poster</text>`}
         <g transform="translate(460, 90)">
           <text fill="#e5e7eb" font-family="Inter, system-ui, -apple-system, Segoe UI, Roboto" font-weight="700" font-size="46">${escapeXml(title)}</text>
           <text y="56" fill="#cbd5e1" font-family="Inter, system-ui, -apple-system, Segoe UI, Roboto" font-size="22">${escapeXml(year)}</text>
-
           <g transform="translate(0, 110)">
             <text fill="#94a3b8" font-size="16" font-family="Inter, system-ui, -apple-system, Segoe UI, Roboto">IMDb</text>
             <text x="0" y="32" fill="#ffffff" font-size="34" font-weight="700" font-family="Inter, system-ui, -apple-system, Segoe UI, Roboto">${escapeXml(imdbRating || 'N/A')}</text>
           </g>
-
           <g transform="translate(200, 110)">
             <text fill="#94a3b8" font-size="16" font-family="Inter, system-ui, -apple-system, Segoe UI, Roboto">Rotten Tomatoes</text>
             <text x="0" y="32" fill="#ffffff" font-size="34" font-weight="700" font-family="Inter, system-ui, -apple-system, Segoe UI, Roboto">${escapeXml(rotten || 'N/A')}</text>
           </g>
-
           <g transform="translate(0, 240)">
             <text fill="#a78bfa" font-size="18" font-family="Inter, system-ui, -apple-system, Segoe UI, Roboto" opacity="0.9">
               Only the ratings that matter — by Ronny
@@ -91,17 +96,22 @@ export async function GET(req: Request) {
     `;
 
     const png = new Resvg(svg, { fitTo: { mode: 'width', value: 1200 } }).render().asPng();
-    const safe = `${(title || 'movie').replace(/[^\w]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')}-${year}`.toLowerCase();
+    const bytes = png instanceof Uint8Array ? png : new Uint8Array(png as any);
+    const safe =
+      `${(title || 'movie').replace(/[^\w]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')}-${year}`.toLowerCase() || 'movie-card';
 
-    return new Response(png, {
+    return new Response(bytes, {
       status: 200,
       headers: {
         'Content-Type': 'image/png',
-        'Content-Disposition': `attachment; filename="${safe || 'movie-card'}.png"`,
+        'Content-Disposition': `attachment; filename="${safe}.png"`,
+        'Content-Length': String(bytes.length),            // Safari needs this
         'Cache-Control': 'no-store',
-      },
+        'X-Content-Type-Options': 'nosniff'
+      }
     });
   } catch (e: any) {
+    // If you open the URL in a tab, you'll see the JSON error
     return NextResponse.json({ error: e?.message || 'Share failed' }, { status: 500 });
   }
 }

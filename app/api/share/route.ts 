@@ -21,14 +21,14 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'Server missing TMDB_KEY' }, { status: 500 });
     }
 
-    // Fetch details
+    // details
     const t = await tmdbMovieDetails(tmdbId, TMDB_KEY);
     const title = t.title || t.original_title || '—';
     const year = (t.release_date || '').slice(0, 4) || '—';
     const imdbId: string | null = t?.external_ids?.imdb_id || null;
     const posterUrl = t.poster_path ? tmdbImageUrl(t.poster_path, 'w500') : '';
 
-    // Ratings (IMDb via OMDb if possible)
+    // ratings
     let imdbRating: string | null = null;
     let rotten: string | null = null;
     if (OMDB_KEY && imdbId) {
@@ -36,17 +36,13 @@ export async function GET(req: Request) {
         const o = await omdbByImdbId(imdbId, OMDB_KEY);
         if (o?.imdbRating && o.imdbRating !== 'N/A') imdbRating = `${o.imdbRating}/10`;
         if (Array.isArray(o?.Ratings)) {
-          const rt = o.Ratings.find((r: any) =>
-            String(r.Source).toLowerCase().includes('rotten')
-          )?.Value;
+          const rt = o.Ratings.find((r: any) => String(r.Source).toLowerCase().includes('rotten'))?.Value;
           if (rt) rotten = rt;
         }
-      } catch {
-        // ignore OMDb errors; keep going
-      }
+      } catch {/* ignore */}
     }
 
-    // Fetch poster binary & embed as data URI
+    // poster -> data URI
     let posterDataUri = '';
     if (posterUrl) {
       try {
@@ -54,12 +50,10 @@ export async function GET(req: Request) {
         const buf = Buffer.from(await imgRes.arrayBuffer());
         const b64 = buf.toString('base64');
         posterDataUri = `data:image/jpeg;base64,${b64}`;
-      } catch {
-        // ignore poster fetch failures
-      }
+      } catch {/* ignore */}
     }
 
-    // SVG card (1200x630)
+    // SVG
     const svg = `
       <svg width="1200" height="630" viewBox="0 0 1200 630" xmlns="http://www.w3.org/2000/svg">
         <defs>
@@ -105,13 +99,12 @@ export async function GET(req: Request) {
       headers: {
         'Content-Type': 'image/png',
         'Content-Disposition': `attachment; filename="${safe}.png"`,
-        'Content-Length': String(bytes.length),            // Safari needs this
+        'Content-Length': String(bytes.length),   // <-- Safari needs this
         'Cache-Control': 'no-store',
         'X-Content-Type-Options': 'nosniff'
       }
     });
   } catch (e: any) {
-    // If you open the URL in a tab, you'll see the JSON error
     return NextResponse.json({ error: e?.message || 'Share failed' }, { status: 500 });
   }
 }

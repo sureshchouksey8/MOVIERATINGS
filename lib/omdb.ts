@@ -6,11 +6,7 @@ export async function omdbByImdbId(imdbId: string, key: string) {
 }
 
 export async function omdbByTitleExact(title: string, year: string | null | undefined, key: string) {
-  const params = new URLSearchParams({
-    apikey: key,
-    t: title,
-    plot: 'short',
-  });
+  const params = new URLSearchParams({ apikey: key, t: title, plot: 'short' });
   if (year && /^\d{4}$/.test(year)) params.set('y', year);
   const res = await fetch(`https://www.omdbapi.com/?${params.toString()}`);
   if (!res.ok) throw new Error('OMDb fetch failed');
@@ -24,14 +20,12 @@ export async function omdbSearch(title: string, key: string) {
   return res.json();
 }
 
-/** Try exact title(s) first, then search, returning a full OMDb record (not just Search hits). */
+/** Try exact title(s) first, then search, and return a full OMDb record. */
 export async function omdbFindByCandidates(candidates: string[], year: string | null | undefined, key: string) {
-  // 1) Exact title attempts (highest precision)
   for (const t of candidates) {
     const r = await omdbByTitleExact(t, year, key);
     if (r && r.Response === 'True') return r;
   }
-  // 2) Search and pick the movie whose year is closest (or any movie if no year)
   for (const t of candidates) {
     const sr = await omdbSearch(t, key);
     const list = Array.isArray(sr?.Search) ? sr.Search : [];
@@ -54,4 +48,45 @@ export async function omdbFindByCandidates(candidates: string[], year: string | 
     }
   }
   return null;
+}
+
+/** Fallback: scrape IMDb title page JSON-LD for aggregateRating.ratingValue */
+export async function imdbRatingFromHtml(imdbId: string): Promise<string | null> {
+  try {
+    const url = `https://www.imdb.com/title/${imdbId}/`;
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0',
+        'Accept-Language': 'en-US,en;q=0.9',
+      },
+      // don’t cache a bad page
+      cache: 'no-store' as RequestCache,
+    });
+    if (!res.ok) return null;
+    const html = await res.text();
+    // find JSON-LD blocks
+    const scripts = [...html.matchAll(/<script[^>]+type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi)];
+    for (const m of scripts) {
+      const raw = (m[1] || '').trim();
+      try {
+        const json = JSON.parse(raw);
+        // Some pages have an array of nodes
+        const nodes = Array.isArray(json) ? json : [json];
+        for (const node of nodes) {
+          const rating = node?.aggregateRating?.ratingValue;
+          if (rating && !Number.isNaN(Number(rating))) {
+            return `${Number(rating).toFixed(1)}/10`;
+          }
+        }
+      } catch {
+        // ignore bad JSON-LD chunks
+      }
+    }
+    // fallback: try to catch ratingValue in inline JSON
+    const m2 = html.match(/"aggregateRating":\s*\{[^}]*"ratingValue":\s*("?)(\d+(\.\d+)?)\1/);
+    if (m2) return `${Number(m2[2]).toFixed(1)}/10`;
+    return null;
+  } catch {
+    return null;
+  }
 }

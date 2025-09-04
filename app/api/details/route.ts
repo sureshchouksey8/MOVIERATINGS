@@ -13,7 +13,7 @@ export async function GET(req: Request) {
   if (!tmdbId) return NextResponse.json({ error: 'tmdbId required' }, { status: 400, headers: noStore() });
 
   const TMDB_KEY = process.env.TMDB_KEY;
-  const OMDB_KEY = process.env.OMDB_KEY;
+  const OMDB_KEY = process.env.OMDB_KEY; // optional
   if (!TMDB_KEY) return NextResponse.json({ error: 'Server missing TMDB_KEY' }, { status: 500, headers: noStore() });
 
   try {
@@ -35,12 +35,19 @@ export async function GET(req: Request) {
         }
         if (Array.isArray(o?.Ratings)) {
           const rt = o.Ratings.find((r: any) => String(r.Source).toLowerCase().includes('rotten'))?.Value;
-          if (rt) rottenTomatoes = rt;
+          if (rt) rottenTomatoes = rt; // like "94%"
         }
       } catch (err) {
-        // ignore OMDb failures silently
+        // ignore OMDb failures
       }
     }
+
+    const backdrop =
+      t?.backdrop_path
+        ? tmdbImageUrl(t.backdrop_path, 'original')
+        : t?.poster_path
+          ? tmdbImageUrl(t.poster_path, 'w500')
+          : null;
 
     const details: DetailResult = {
       tmdbId,
@@ -49,6 +56,7 @@ export async function GET(req: Request) {
       year: (t.release_date || '').slice(0, 4) || '—',
       genres: Array.isArray(t.genres) ? t.genres.map((g: any) => g.name) : [],
       poster: t.poster_path ? tmdbImageUrl(t.poster_path, 'w500') : null,
+      backdrop,
       plot: t.overview || null,
       imdbRating,
       rottenTomatoes,

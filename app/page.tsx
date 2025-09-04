@@ -11,15 +11,12 @@ export default function Page() {
   async function loadDetails(tmdbId: number) {
     setError(null); setLoading(true);
     try {
-<<<<<<< HEAD
-      const r = await fetch(`/api/details?tmdbId=${tmdbId}`, { cache: 'no-store' });
-=======
+      // bust cache explicitly (in addition to server no-store)
       const bust = Date.now();
       const r = await fetch(`/api/details?tmdbId=${tmdbId}&t=${bust}`, { cache: 'no-store', headers: { 'x-no-cache': String(bust) } });
->>>>>>> 45b4f786ff96d024261973ad06b1a6942f078547
       const j = await r.json();
       if (r.ok) setDetail(j); else setError(j?.error || 'Failed');
-    } catch (e: any) { setError('Network error'); }
+    } catch { setError('Network error'); }
     finally { setLoading(false); }
   }
 
@@ -38,7 +35,6 @@ export default function Page() {
         {error && <p className="mt-3 text-sm text-rose-300">{error}</p>}
       </section>
 
-<<<<<<< HEAD
       <section className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="lg:col-span-1">
           <h2 className="mb-2 text-sm uppercase tracking-wider text-slate-400">Selected</h2>
@@ -46,13 +42,6 @@ export default function Page() {
             {!detail ? (
               <div className="text-slate-300">Search and choose a movie.</div>
             ) : (
-=======
-      {detail && (
-        <section className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
-          <div className="lg:col-span-1">
-            <h2 className="mb-2 text-sm uppercase tracking-wider text-slate-400">Selected</h2>
-            <div className="rounded-2xl border border-slate-700/50 bg-slate-900/40 p-4">
->>>>>>> 45b4f786ff96d024261973ad06b1a6942f078547
               <div className="grid grid-cols-1 gap-4">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
@@ -72,7 +61,6 @@ export default function Page() {
           </div>
         </div>
 
-<<<<<<< HEAD
         <div className="lg:col-span-2">
           <h2 className="mb-2 text-sm uppercase tracking-wider text-slate-400">Ratings</h2>
           <div className="rounded-2xl border border-slate-700/50 bg-slate-900/40 p-4">
@@ -80,18 +68,8 @@ export default function Page() {
               <RatingBadge label="IMDb" value={detail?.imdbRating || null} href={detail?.links?.imdb} />
               <RatingBadge label="Rotten Tomatoes" value={detail?.rottenTomatoes || null} href={detail?.links?.rottenTomatoesSearch} />
             </div>
-=======
-          <div className="lg:col-span-2">
-            <h2 className="mb-2 text-sm uppercase tracking-wider text-slate-400">Ratings</h2>
-            <div className="rounded-2xl border border-slate-700/50 bg-slate-900/40 p-4">
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <RatingBadge label="IMDb" value={detail?.imdbRating || null} href={detail?.links?.imdb} />
-                <RatingBadge label="Rotten Tomatoes" value={detail?.rottenTomatoes || null} href={detail?.links?.rottenTomatoesSearch} />
-              </div>
->>>>>>> 45b4f786ff96d024261973ad06b1a6942f078547
 
-<<<<<<< HEAD
-            {/* NEW: Trailer (embed when possible; otherwise search-embed; otherwise fallback link) */}
+            {/* Trailer block */}
             {detail?.trailer?.embedUrl ? (
               <div className="mt-5">
                 <div className="text-xs uppercase tracking-wide text-slate-400 mb-2">Trailer</div>
@@ -105,26 +83,8 @@ export default function Page() {
                       allowFullScreen
                       loading="lazy"
                     />
-=======
-              {/* Trailer block */}
-              {detail?.trailer?.embedUrl ? (
-                <div className="mt-5">
-                  <div className="text-xs uppercase tracking-wide text-slate-400 mb-2">Trailer</div>
-                  <div className="overflow-hidden rounded-xl ring-1 ring-white/10 shadow-2xl">
-                    <div className="aspect-video">
-                      <iframe
-                        className="h-full w-full"
-                        src={detail.trailer.embedUrl}
-                        title="Official trailer"
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                        allowFullScreen
-                        loading="lazy"
-                      />
-                    </div>
->>>>>>> 45b4f786ff96d024261973ad06b1a6942f078547
                   </div>
                 </div>
-<<<<<<< HEAD
               </div>
             ) : detail?.trailer?.searchEmbedUrl ? (
               <div className="mt-5">
@@ -140,36 +100,7 @@ export default function Page() {
                       loading="lazy"
                     />
                   </div>
-=======
-              ) : detail?.trailer?.searchEmbedUrl ? (
-                <div className="mt-5">
-                  <div className="text-xs uppercase tracking-wide text-slate-400 mb-2">Trailer (best match)</div>
-                  <div className="overflow-hidden rounded-xl ring-1 ring-white/10 shadow-2xl">
-                    <div className="aspect-video">
-                      <iframe
-                        className="h-full w-full"
-                        src={detail.trailer.searchEmbedUrl}
-                        title="Trailer search"
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                        allowFullScreen
-                        loading="lazy"
-                      />
-                    </div>
-                  </div>
                 </div>
-              ) : (
-                <div className="mt-5">
-                  <a
-                    className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/10 px-3 py-2 text-sm hover:bg-white/15 transition"
-                    href={`https://www.youtube.com/results?${new URLSearchParams({ search_query: `${detail.title} ${detail.year || ''} official trailer` }).toString()}`}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Watch trailer on YouTube ↗
-                  </a>
->>>>>>> 45b4f786ff96d024261973ad06b1a6942f078547
-                </div>
-<<<<<<< HEAD
               </div>
             ) : detail ? (
               <div className="mt-5">
@@ -183,10 +114,6 @@ export default function Page() {
                 </a>
               </div>
             ) : null}
-=======
-              )}
-            </div>
->>>>>>> 45b4f786ff96d024261973ad06b1a6942f078547
           </div>
         </div>
       </section>

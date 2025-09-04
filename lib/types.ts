@@ -19,10 +19,11 @@ export type DetailResult = {
     imdb?: string;
     rottenTomatoesSearch?: string;
   };
+  // NEW: optional trailer info
   trailer?: {
-    youtubeKey?: string;           // when TMDb provides a YT key
-    youtubeUrl?: string;           // https://www.youtube.com/watch?v=...
-    embedUrl?: string;             // https://www.youtube.com/embed/<key>
-    searchEmbedUrl?: string;       // fallback: /embed?listType=search&list=...
+    youtubeKey?: string;
+    youtubeUrl?: string;
+    embedUrl?: string;        // https://www.youtube.com/embed/<key>
+    searchEmbedUrl?: string;  // https://www.youtube.com/embed?listType=search&list=...
   };
 };

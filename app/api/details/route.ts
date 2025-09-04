@@ -20,6 +20,7 @@ export async function GET(req: Request) {
     const t = await tmdbMovieDetails(tmdbId, TMDB_KEY);
     const imdbId: string | null = t?.external_ids?.imdb_id || null;
 
+    // Ratings
     let imdbRating: string | null = null;
     let rottenTomatoes: string | null = null;
 
@@ -35,23 +36,33 @@ export async function GET(req: Request) {
         }
         if (Array.isArray(o?.Ratings)) {
           const rt = o.Ratings.find((r: any) => String(r.Source).toLowerCase().includes('rotten'))?.Value;
-          if (rt) rottenTomatoes = rt; // like "94%"
+          if (rt) rottenTomatoes = rt;
         }
-      } catch (err) {
+      } catch {
         // ignore OMDb failures
       }
     }
 
-    // Choose a YouTube trailer if present
+    // Smarter trailer selection from TMDb videos
     let trailerKey: string | undefined;
-    const vids = t?.videos?.results || [];
-    if (Array.isArray(vids)) {
-      // pick official trailer first, then any trailer, then teaser
-      const pick =
-        vids.find((v: any) => v.site === 'YouTube' && v.type === 'Trailer' && v.official) ||
-        vids.find((v: any) => v.site === 'YouTube' && v.type === 'Trailer') ||
-        vids.find((v: any) => v.site === 'YouTube' && v.type === 'Teaser');
-      trailerKey = pick?.key;
+    const vids = Array.isArray(t?.videos?.results) ? t.videos.results : [];
+    if (vids.length) {
+      const sorted = [...vids]
+        .filter((v: any) => v.site === 'YouTube' && (v.type === 'Trailer' || v.type === 'Teaser'))
+        .sort((a: any, b: any) => {
+          // Prefer "Official Trailer" and official=true, then latest published_at
+          const aScore =
+            (a.official ? 2 : 0) +
+            (String(a.name || '').toLowerCase().includes('official trailer') ? 3 : 0) +
+            (a.type === 'Trailer' ? 1 : 0);
+          const bScore =
+            (b.official ? 2 : 0) +
+            (String(b.name || '').toLowerCase().includes('official trailer') ? 3 : 0) +
+            (b.type === 'Trailer' ? 1 : 0);
+          if (bScore !== aScore) return bScore - aScore;
+          return new Date(b.published_at || 0).getTime() - new Date(a.published_at || 0).getTime();
+        });
+      trailerKey = sorted[0]?.key;
     }
 
     const details: DetailResult = {
@@ -61,9 +72,10 @@ export async function GET(req: Request) {
       year: (t.release_date || '').slice(0, 4) || '—',
       genres: Array.isArray(t.genres) ? t.genres.map((g: any) => g.name) : [],
       poster: t.poster_path ? tmdbImageUrl(t.poster_path, 'w500') : null,
-      backdrop: t.backdrop_path ? tmdbImageUrl(t.backdrop_path, 'original') : (t.poster_path ? tmdbImageUrl(t.poster_path, 'w500') : null),
       plot: t.overview || null,
 
+      // facts
+      backdrop: t.backdrop_path ? tmdbImageUrl(t.backdrop_path, 'original') : (t.poster_path ? tmdbImageUrl(t.poster_path, 'w500') : null),
       runtime: Number.isFinite(t?.runtime) ? Number(t.runtime) : null,
       tagline: t?.tagline || null,
       releaseDate: t?.release_date || null,

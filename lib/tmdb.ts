@@ -10,7 +10,6 @@ export async function tmdbSearchMovies(q: string, key: string, page = 1) {
   if (key.startsWith('ey')) headers.Authorization = `Bearer ${key}`; // v4 token only
   const res = await fetch(url, { headers });
 
-  // Fallback to v3 key if auth fails
   if (res.status === 401 || res.status === 404) {
     const res2 = await fetch(`${url}&api_key=${encodeURIComponent(key)}`);
     if (!res2.ok) throw new Error('TMDb search failed');
@@ -22,7 +21,7 @@ export async function tmdbSearchMovies(q: string, key: string, page = 1) {
 }
 
 export async function tmdbMovieDetails(tmdbId: number, key: string) {
-  // include videos so we can embed trailers
+  // include videos so we can pick the actual trailer
   const baseUrl = `${TMDB.base}/movie/${tmdbId}?append_to_response=external_ids,videos`;
   const headers: Record<string, string> = {};
   if (key.startsWith('ey')) headers.Authorization = `Bearer ${key}`; // v4 token only

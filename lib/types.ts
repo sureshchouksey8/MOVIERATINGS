@@ -12,13 +12,13 @@ export type DetailResult = {
   year: string;
   genres: string[];
   poster: string | null;   // full URL
-  backdrop: string | null; // full URL
   plot: string | null;
 
-  // Little facts
-  runtime: number | null;       // minutes
-  tagline: string | null;
-  releaseDate: string | null;   // YYYY-MM-DD
+  // New: artwork + facts
+  backdrop?: string | null;      // optional; if you adopt later
+  runtime?: number | null;       // minutes
+  tagline?: string | null;
+  releaseDate?: string | null;   // YYYY-MM-DD
 
   // Ratings
   imdbRating: string | null;      // e.g., "8.5/10" or null if missing

@@ -17,12 +17,10 @@ export default function SearchBar({
   const abortRef = useRef<AbortController | null>(null);
   const seqRef = useRef(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const blurTimeout = useRef<number | null>(null);
 
   useEffect(() => {
     const term = q.trim();
 
-    // Close & clear when too short
     if (term.length < 2) {
       setResults([]);
       setOpen(false);
@@ -34,11 +32,17 @@ export default function SearchBar({
     abortRef.current?.abort();
     const ctrl = new AbortController();
     abortRef.current = ctrl;
+
     setLoading(true);
-    setOpen(true); // show dropdown while fetching
+    setOpen(true);
 
     const t = setTimeout(() => {
-      fetch(`/api/search?q=${encodeURIComponent(term)}`, { signal: ctrl.signal })
+      const bust = Date.now(); // cache-buster
+      fetch(`/api/search?q=${encodeURIComponent(term)}&t=${bust}`, {
+        signal: ctrl.signal,
+        cache: 'no-store',
+        headers: { 'x-no-cache': String(bust) },
+      })
         .then((r) => r.json())
         .then((j) => {
           if (seq === seqRef.current) {
@@ -48,7 +52,6 @@ export default function SearchBar({
         })
         .catch((err) => {
           if (err?.name !== 'AbortError' && seq === seqRef.current) {
-            // Clear stale list on errors so user doesn't see old results
             setResults([]);
             setOpen(false);
           }
@@ -56,7 +59,7 @@ export default function SearchBar({
         .finally(() => {
           if (seq === seqRef.current) setLoading(false);
         });
-    }, 250); // debounce
+    }, 200);
 
     return () => {
       ctrl.abort();
@@ -69,13 +72,12 @@ export default function SearchBar({
     setResults([]);
     setOpen(false);
     onClearSelection?.();
-    // keep focus so user can type again
     requestAnimationFrame(() => inputRef.current?.focus());
   }
 
   function handleSelect(id: number) {
     onSelect(id);
-    // reset search box so user can search again immediately
+    // reset so a new query starts fresh
     setQ('');
     setResults([]);
     setOpen(false);
@@ -90,8 +92,9 @@ export default function SearchBar({
         placeholder="Search any movie…"
         value={q}
         onChange={(e) => {
-          setQ(e.target.value);
-          setOpen(e.target.value.trim().length >= 2);
+          const val = e.target.value;
+          setQ(val);
+          setOpen(val.trim().length >= 2);
         }}
         onKeyDown={(e) => {
           if (e.key === 'Escape') clearAll();
@@ -99,16 +102,12 @@ export default function SearchBar({
         onFocus={() => {
           if (results.length >= 1) setOpen(true);
         }}
-        onBlur={() => {
-          // small delay so clicks on dropdown can register
-          blurTimeout.current = window.setTimeout(() => setOpen(false), 150);
-        }}
       />
 
       {/* Search icon */}
       <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">🔎</span>
 
-      {/* Clear button */}
+      {/* Clear */}
       {q && (
         <button
           aria-label="Clear search"
@@ -123,14 +122,7 @@ export default function SearchBar({
       {open && (
         <div
           className="absolute z-20 mt-2 max-h-96 w-full overflow-auto rounded-xl border border-slate-700/50 bg-slate-900/95 p-2 shadow-2xl backdrop-blur"
-          onMouseDown={(e) => {
-            // prevent input blur closing before click registers
-            e.preventDefault();
-            if (blurTimeout.current) {
-              clearTimeout(blurTimeout.current);
-              blurTimeout.current = null;
-            }
-          }}
+          onMouseDown={(e) => e.preventDefault()} // keep input from blurring
         >
           {loading && <div className="p-3 text-sm text-slate-300">Searching…</div>}
           {!loading && results.length === 0 && (

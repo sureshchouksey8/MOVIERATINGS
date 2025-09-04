@@ -12,10 +12,10 @@ export default function Page() {
     setError(null);
     setLoading(true);
     try {
-      const r = await fetch(`/api/details?tmdbId=${tmdbId}`);
+      const bust = Date.now();
+      const r = await fetch(`/api/details?tmdbId=${tmdbId}&t=${bust}`, { cache: 'no-store', headers: { 'x-no-cache': String(bust) } });
       const j = await r.json();
-      if (r.ok) setDetail(j);
-      else setError(j?.error || 'Failed');
+      if (r.ok) setDetail(j); else setError(j?.error || 'Failed');
     } catch {
       setError('Network error');
     } finally {
@@ -28,9 +28,7 @@ export default function Page() {
       <header className="mb-4">
         <h1 className="text-3xl font-semibold tracking-tight">Movie Ratings Finder</h1>
         <p className="text-sm text-slate-300">Search → pick a movie → see poster + IMDb + Rotten Tomatoes.</p>
-        <div className="mt-1 text-xs text-slate-400">
-          This product uses the TMDb API but is not endorsed by TMDb.
-        </div>
+        <div className="mt-1 text-xs text-slate-400">This product uses the TMDb API but is not endorsed by TMDb.</div>
       </header>
 
       <section className="rounded-2xl border border-slate-700/50 bg-slate-900/60 p-4 shadow-xl backdrop-blur">
@@ -53,17 +51,11 @@ export default function Page() {
             <p className="text-sm text-slate-300">
               {detail.year} {detail.genres?.length ? <>• <span>{detail.genres.join(', ')}</span></> : null}
             </p>
-            {detail.plot && (
-              <p className="mt-2 text-sm leading-relaxed text-slate-200/90">{detail.plot}</p>
-            )}
+            {detail.plot && <p className="mt-2 text-sm leading-relaxed text-slate-200/90">{detail.plot}</p>}
 
             <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
               <RatingBadge label="IMDb" value={detail?.imdbRating || null} href={detail?.links?.imdb} />
-              <RatingBadge
-                label="Rotten Tomatoes"
-                value={detail?.rottenTomatoes || null}
-                href={detail?.links?.rottenTomatoesSearch}
-              />
+              <RatingBadge label="Rotten Tomatoes" value={detail?.rottenTomatoes || null} href={detail?.links?.rottenTomatoesSearch} />
             </div>
           </div>
         </section>

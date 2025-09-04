@@ -42,12 +42,17 @@ export async function GET(req: Request) {
       }
     }
 
-    const backdrop =
-      t?.backdrop_path
-        ? tmdbImageUrl(t.backdrop_path, 'original')
-        : t?.poster_path
-          ? tmdbImageUrl(t.poster_path, 'w500')
-          : null;
+    // Choose a YouTube trailer if present
+    let trailerKey: string | undefined;
+    const vids = t?.videos?.results || [];
+    if (Array.isArray(vids)) {
+      // pick official trailer first, then any trailer, then teaser
+      const pick =
+        vids.find((v: any) => v.site === 'YouTube' && v.type === 'Trailer' && v.official) ||
+        vids.find((v: any) => v.site === 'YouTube' && v.type === 'Trailer') ||
+        vids.find((v: any) => v.site === 'YouTube' && v.type === 'Teaser');
+      trailerKey = pick?.key;
+    }
 
     const details: DetailResult = {
       tmdbId,
@@ -56,10 +61,22 @@ export async function GET(req: Request) {
       year: (t.release_date || '').slice(0, 4) || '—',
       genres: Array.isArray(t.genres) ? t.genres.map((g: any) => g.name) : [],
       poster: t.poster_path ? tmdbImageUrl(t.poster_path, 'w500') : null,
-      backdrop,
+      backdrop: t.backdrop_path ? tmdbImageUrl(t.backdrop_path, 'original') : (t.poster_path ? tmdbImageUrl(t.poster_path, 'w500') : null),
       plot: t.overview || null,
+
+      runtime: Number.isFinite(t?.runtime) ? Number(t.runtime) : null,
+      tagline: t?.tagline || null,
+      releaseDate: t?.release_date || null,
+
       imdbRating,
       rottenTomatoes,
+      trailer: trailerKey
+        ? {
+            youtubeKey: trailerKey,
+            youtubeUrl: `https://www.youtube.com/watch?v=${trailerKey}`,
+          }
+        : undefined,
+
       links: {
         imdb: imdbId ? `https://www.imdb.com/title/${imdbId}/` : undefined,
         rottenTomatoesSearch: `https://www.rottentomatoes.com/search?search=${encodeURIComponent(t.title || '')}`,

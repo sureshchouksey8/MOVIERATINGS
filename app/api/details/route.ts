@@ -23,35 +23,31 @@ export async function GET(req: Request) {
     let imdbRating: string | null = null;
     let rottenTomatoes: string | null = null;
 
-    // 1) OMDb via imdbId (best path)
+    // 1) OMDb via imdbId
     if (OMDB_KEY && imdbId) {
       try {
         const o = await omdbByImdbId(imdbId, OMDB_KEY);
         if (o?.Response === 'True') {
           if (o?.imdbRating && o.imdbRating !== 'N/A') imdbRating = `${o.imdbRating}/10`;
           else if (Array.isArray(o?.Ratings)) {
-            const v = o.Ratings.find((r: any) =>
-              String(r.Source).toLowerCase().includes('internet movie database')
-            )?.Value;
+            const v = o.Ratings.find((r: any) => String(r.Source).toLowerCase().includes('internet movie database'))?.Value;
             if (v) imdbRating = v;
           }
           if (Array.isArray(o?.Ratings)) {
-            const rt = o.Ratings.find((r: any) =>
-              String(r.Source).toLowerCase().includes('rotten')
-            )?.Value;
+            const rt = o.Ratings.find((r: any) => String(r.Source).toLowerCase().includes('rotten'))?.Value;
             if (rt) rottenTomatoes = rt;
           }
         }
       } catch { /* continue */ }
     }
 
-    // 2) If still no IMDb rating and we DO have imdbId, scrape IMDb JSON-LD
+    // 2) IMDb JSON-LD scrape if needed
     if (!imdbRating && imdbId) {
       const scraped = await imdbRatingFromHtml(imdbId);
       if (scraped) imdbRating = scraped;
     }
 
-    // 3) If no imdbId or still missing ratings, OMDb by title/year with smart candidates
+    // 3) OMDb by title/year (smart candidates)
     if (OMDB_KEY && (!imdbId || (!imdbRating && !rottenTomatoes))) {
       try {
         const o2 = await omdbFindByCandidates(buildTitleCandidates(title, t?.original_title, t?.tagline), year, OMDB_KEY);
@@ -60,16 +56,12 @@ export async function GET(req: Request) {
           if (!imdbRating) {
             if (o2?.imdbRating && o2.imdbRating !== 'N/A') imdbRating = `${o2.imdbRating}/10`;
             else if (Array.isArray(o2?.Ratings)) {
-              const v = o2.Ratings.find((r: any) =>
-                String(r.Source).toLowerCase().includes('internet movie database')
-              )?.Value;
+              const v = o2.Ratings.find((r: any) => String(r.Source).toLowerCase().includes('internet movie database'))?.Value;
               if (v) imdbRating = v;
             }
           }
           if (!rottenTomatoes && Array.isArray(o2?.Ratings)) {
-            const rt = o2.Ratings.find((r: any) =>
-              String(r.Source).toLowerCase().includes('rotten')
-            )?.Value;
+            const rt = o2.Ratings.find((r: any) => String(r.Source).toLowerCase().includes('rotten'))?.Value;
             if (rt) rottenTomatoes = rt;
           }
         }
@@ -93,7 +85,6 @@ export async function GET(req: Request) {
         });
       trailerKey = sorted[0]?.key;
     }
-
     const query = encodeURIComponent(`${title} ${year || ''} official trailer`.trim());
 
     const details: DetailResult = {
@@ -111,14 +102,8 @@ export async function GET(req: Request) {
         rottenTomatoesSearch: `https://www.rottentomatoes.com/search?search=${encodeURIComponent(title)}`,
       },
       trailer: trailerKey
-        ? {
-            youtubeKey: trailerKey,
-            youtubeUrl: `https://www.youtube.com/watch?v=${trailerKey}`,
-            embedUrl: `https://www.youtube.com/embed/${trailerKey}`,
-          }
-        : {
-            searchEmbedUrl: `https://www.youtube.com/embed?listType=search&list=${query}`,
-          },
+        ? { youtubeKey: trailerKey, youtubeUrl: `https://www.youtube.com/watch?v=${trailerKey}`, embedUrl: `https://www.youtube.com/embed/${trailerKey}` }
+        : { searchEmbedUrl: `https://www.youtube.com/embed?listType=search&list=${query}` },
     };
 
     return NextResponse.json(details, { status: 200, headers: noStore() });
@@ -136,17 +121,16 @@ function noStore() {
   };
 }
 
-/** Normalize messy titles (songs/trailers) into movie-title candidates for OMDb. */
 function buildTitleCandidates(...titles: Array<string | undefined>) {
   const set = new Set<string>();
   for (const raw of titles) {
     if (!raw) continue;
     const base = raw.trim();
-    push(base); // as-is
-    push(base.replace(/\s*[\(\[\{].*?[\)\]\}]\s*/g, ' ').replace(/\s{2,}/g, ' ').trim()); // strip brackets
+    push(base);
+    push(base.replace(/\s*[\(\[\{].*?[\)\]\}]\s*/g, ' ').replace(/\s{2,}/g, ' ').trim());
     const fromMatch = base.match(/from\s+['"]([^'"]+)['"]/i);
-    if (fromMatch?.[1]) push(fromMatch[1].trim()); // e.g., “Param Sundari (from ‘Mimi’)” → Mimi
-    for (const part of base.split(/[:\-–—]\s*/)) if (part) push(part.trim()); // split on dash/colon
+    if (fromMatch?.[1]) push(fromMatch[1].trim());
+    for (const part of base.split(/[:\-–—]\s*/)) if (part) push(part.trim());
     push(
       base
         .toLowerCase()

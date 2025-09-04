@@ -20,7 +20,6 @@ export async function omdbSearch(title: string, key: string) {
   return res.json();
 }
 
-/** Try exact title(s), then search; returns a full OMDb record. */
 export async function omdbFindByCandidates(candidates: string[], year: string | null | undefined, key: string) {
   for (const t of candidates) {
     const r = await omdbByTitleExact(t, year, key);
@@ -50,7 +49,6 @@ export async function omdbFindByCandidates(candidates: string[], year: string | 
   return null;
 }
 
-/** Fallback: parse IMDb title page JSON-LD for aggregateRating.ratingValue. */
 export async function imdbRatingFromHtml(imdbId: string): Promise<string | null> {
   try {
     const url = `https://www.imdb.com/title/${imdbId}/`;
@@ -71,7 +69,7 @@ export async function imdbRatingFromHtml(imdbId: string): Promise<string | null>
           const rating = node?.aggregateRating?.ratingValue;
           if (rating && !Number.isNaN(Number(rating))) return `${Number(rating).toFixed(1)}/10`;
         }
-      } catch { /* ignore chunk */ }
+      } catch { /* ignore */ }
     }
 
     const m2 = html.match(/"aggregateRating":\s*\{[^}]*"ratingValue":\s*("?)(\d+(\.\d+)?)\1/);

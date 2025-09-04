@@ -2,26 +2,41 @@ import { NextResponse } from 'next/server';
 import { tmdbMovieDetails, tmdbImageUrl } from '@/lib/tmdb';
 import { omdbByImdbId } from '@/lib/omdb';
 import type { DetailResult } from '@/lib/types';
+import { lru } from '@/lib/cache';
+import { limitOrThrow } from '@/lib/rateLimit';
 
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export async function GET(req: Request) {
+  try {
+    limitOrThrow(req, 'details', 120); // 120 rpm per IP
+  } catch (e: any) {
+    return new NextResponse(e.message, { status: e.status || 429, headers: e.headers });
+  }
+
   const { searchParams } = new URL(req.url);
   const tmdbId = Number(searchParams.get('tmdbId') || '');
-  if (!tmdbId) return NextResponse.json({ error: 'tmdbId required' }, { status: 400 });
+  if (!tmdbId) return NextResponse.json({ error: 'tmdbId required' }, { status: 400, headers: noStore() });
 
   const TMDB_KEY = process.env.TMDB_KEY;
-  const OMDB_KEY = process.env.OMDB_KEY; // optional
-  if (!TMDB_KEY) return NextResponse.json({ error: 'Server missing TMDB_KEY' }, { status: 500 });
+  const OMDB_KEY = process.env.OMDB_KEY || '';
+  if (!TMDB_KEY) return NextResponse.json({ error: 'Server missing TMDB_KEY' }, { status: 500, headers: noStore() });
+
+  // cache
+  const cacheKey = `details:${tmdbId}`;
+  const cached = lru.get<DetailResult>(cacheKey);
+  if (cached) return NextResponse.json(cached, { status: 200, headers: noStore() });
 
   try {
     const t = await tmdbMovieDetails(tmdbId, TMDB_KEY);
     const imdbId: string | null = t?.external_ids?.imdb_id || null;
 
-    // ratings
     let imdbRating: string | null = null;
     let rottenTomatoes: string | null = null;
 
+    // OMDb (cache it too if you want; here it’s cheap enough)
     if (imdbId && OMDB_KEY) {
       try {
         const o = await omdbByImdbId(imdbId, OMDB_KEY);
@@ -36,28 +51,9 @@ export async function GET(req: Request) {
           const rt = o.Ratings.find((r: any) => String(r.Source).toLowerCase().includes('rotten'))?.Value;
           if (rt) rottenTomatoes = rt;
         }
-      } catch { /* ignore OMDb failures */ }
-    }
-
-    // choose best YouTube trailer: official trailer > trailer > teaser, newest first
-    let trailerKey: string | undefined;
-    const vids = Array.isArray(t?.videos?.results) ? t.videos.results : [];
-    if (vids.length) {
-      const sorted = [...vids]
-        .filter((v: any) => v.site === 'YouTube' && (v.type === 'Trailer' || v.type === 'Teaser'))
-        .sort((a: any, b: any) => {
-          const aScore =
-            (a.official ? 2 : 0) +
-            (String(a.name || '').toLowerCase().includes('official trailer') ? 3 : 0) +
-            (a.type === 'Trailer' ? 1 : 0);
-          const bScore =
-            (b.official ? 2 : 0) +
-            (String(b.name || '').toLowerCase().includes('official trailer') ? 3 : 0) +
-            (b.type === 'Trailer' ? 1 : 0);
-          if (bScore !== aScore) return bScore - aScore;
-          return new Date(b.published_at || 0).getTime() - new Date(a.published_at || 0).getTime();
-        });
-      trailerKey = sorted[0]?.key;
+      } catch (err) {
+        console.warn('OMDb fail', (err as any)?.message);
+      }
     }
 
     const details: DetailResult = {
@@ -70,21 +66,28 @@ export async function GET(req: Request) {
       plot: t.overview || null,
       imdbRating,
       rottenTomatoes,
+      // friendly bits:
+      releaseDate: t?.release_date || null,
+      countries: Array.isArray(t?.production_countries) ? t.production_countries.map((c: any) => c.iso_3166_1) : [],
       links: {
         imdb: imdbId ? `https://www.imdb.com/title/${imdbId}/` : undefined,
         rottenTomatoesSearch: `https://www.rottentomatoes.com/search?search=${encodeURIComponent(t.title || '')}`,
       },
-      ...(trailerKey
-        ? { trailer: { youtubeKey: trailerKey, youtubeUrl: `https://www.youtube.com/watch?v=${trailerKey}` } }
-        : {}),
     };
 
-    // no-store to avoid “stuck” details
-    return NextResponse.json(details, {
-      status: 200,
-      headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0' },
-    });
+    lru.set(cacheKey, details, 15 * 60_000);
+    return NextResponse.json(details, { status: 200, headers: noStore() });
   } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'Details failed' }, { status: 500 });
+    console.error('details error', e?.message);
+    return NextResponse.json({ error: e?.message || 'Details failed' }, { status: 500, headers: noStore() });
   }
+}
+
+function noStore() {
+  return {
+    'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+    Pragma: 'no-cache',
+    Expires: '0',
+    Vary: '*',
+  };
 }

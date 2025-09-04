@@ -43,11 +43,11 @@ export default function Page() {
             <p className="text-xs sm:text-sm text-slate-300">Type → pick a movie → see ratings. Press “/” to focus.</p>
           </div>
           {/* Fancy brand line on the right */}
-          <div className="text-right">
-            <div className="text-lg sm:text-xl font-semibold bg-gradient-to-r from-pink-400 via-amber-300 to-emerald-300 bg-clip-text text-transparent tracking-wide">
-              Only the ratings that matter — by RONNY
-            </div>
-          </div>
+          <div className="text-right leading-tight">
+  <div className="rainbow-text text-lg sm:text-xl font-semibold">
+    Only the ratings that matter — by RONNY
+  </div>
+</div>
         </div>
         <div className="mt-1 text-[11px] text-slate-400">This product uses the TMDb API but is not endorsed by TMDb.</div>
       </header>

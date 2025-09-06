@@ -1,7 +1,13 @@
 import { tmdbSearchMovies, tmdbImageUrl } from '@/lib/tmdb';
-import type { SearchResult } from '@/lib/types';
 
 export const runtime = 'nodejs';
+
+type LiteSearch = {
+  tmdbId: number;
+  title: string;
+  year: string;
+  poster: string | null;
+};
 
 function json(body: any, init: ResponseInit = {}) {
   const headers = new Headers(init.headers);
@@ -19,12 +25,13 @@ export async function GET(req: Request) {
   if (!q || q.length < 2) {
     return json({ results: [] }, { status: 200, headers: cacheHeaders(30) });
   }
+
   const TMDB_KEY = process.env.TMDB_KEY;
   if (!TMDB_KEY) return json({ error: 'Server missing TMDB_KEY' }, { status: 500, headers: cacheHeaders(0) });
 
   try {
     const data = await tmdbSearchMovies(q, TMDB_KEY);
-    const results: SearchResult[] = (data.results || []).slice(0, 10).map((m: any) => ({
+    const results: LiteSearch[] = (data.results || []).slice(0, 10).map((m: any) => ({
       tmdbId: m.id,
       title: m.title,
       year: (m.release_date || '').slice(0, 4) || '—',

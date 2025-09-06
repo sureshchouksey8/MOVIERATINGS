@@ -1,3 +1,4 @@
+// app/api/share/route.ts
 import { NextResponse } from 'next/server';
 import { tmdbMovieDetails, tmdbImageUrl } from '@/lib/tmdb';
 import { omdbByImdbId } from '@/lib/omdb';
@@ -6,26 +7,6 @@ import { Resvg } from '@resvg/resvg-js';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
-
-function escapeXml(s: string) {
-  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
-}
-
-// Some browsers do a HEAD probe before GET for downloads
-export async function HEAD(req: Request) {
-  const { searchParams } = new URL(req.url);
-  const tmdbId = Number(searchParams.get('tmdbId') || '');
-  if (!tmdbId) return new Response(null, { status: 400 });
-  return new Response(null, {
-    status: 200,
-    headers: {
-      'Content-Type': 'image/png',
-      'Cache-Control': 'no-store',
-      'X-Content-Type-Options': 'nosniff',
-      'Accept-Ranges': 'none',
-    },
-  });
-}
 
 export async function GET(req: Request) {
   try {
@@ -37,12 +18,14 @@ export async function GET(req: Request) {
     const OMDB_KEY = process.env.OMDB_KEY || '';
     if (!TMDB_KEY) return NextResponse.json({ error: 'Server missing TMDB_KEY' }, { status: 500 });
 
+    // --- Gather data
     const t = await tmdbMovieDetails(tmdbId, TMDB_KEY);
     const title = t.title || t.original_title || '—';
     const year = (t.release_date || '').slice(0, 4) || '—';
     const imdbId: string | null = t?.external_ids?.imdb_id || null;
     const posterUrl = t.poster_path ? tmdbImageUrl(t.poster_path, 'w500') : '';
 
+    // ratings via OMDb if possible
     let imdbRating: string | null = null;
     let rotten: string | null = null;
     if (OMDB_KEY && imdbId) {
@@ -56,16 +39,17 @@ export async function GET(req: Request) {
       } catch {/* ignore */}
     }
 
-    // embed poster as data URI
+    // embed poster as data URI for SVG
     let posterDataUri = '';
     if (posterUrl) {
       try {
-        const imgRes = await fetch(posterUrl, { cache: 'no-store' });
+        const imgRes = await fetch(posterUrl);
         const buf = Buffer.from(await imgRes.arrayBuffer());
         posterDataUri = `data:image/jpeg;base64,${buf.toString('base64')}`;
       } catch {/* ignore */}
     }
 
+    // --- SVG template
     const svg = `
       <svg width="1200" height="630" viewBox="0 0 1200 630" xmlns="http://www.w3.org/2000/svg">
         <defs>
@@ -80,20 +64,22 @@ export async function GET(req: Request) {
         ${posterDataUri
           ? `<image href="${posterDataUri}" x="64" y="64" width="360" height="540" preserveAspectRatio="xMidYMid slice" clip-path="url(#r)"/>`
           : `<rect x="64" y="64" width="360" height="540" rx="24" fill="#0b1020" stroke="#1f2a44" stroke-width="2"/>
-             <text x="244" y="340" text-anchor="middle" fill="#94a3b8" font-family="Inter, system-ui, -apple-system, Segoe UI, Roboto" font-size="22">No Poster</text>`}
+             <text x="244" y="340" text-anchor="middle" fill="#94a3b8" font-family="Inter, system-ui" font-size="22">No Poster</text>`}
         <g transform="translate(460, 90)">
-          <text fill="#e5e7eb" font-family="Inter, system-ui, -apple-system, Segoe UI, Roboto" font-weight="700" font-size="46">${escapeXml(title)}</text>
-          <text y="56" fill="#cbd5e1" font-family="Inter, system-ui, -apple-system, Segoe UI, Roboto" font-size="22">${escapeXml(year)}</text>
+          <text fill="#e5e7eb" font-family="Inter, system-ui" font-weight="700" font-size="46">${escapeXml(title)}</text>
+          <text y="56" fill="#cbd5e1" font-family="Inter, system-ui" font-size="22">${escapeXml(year)}</text>
+
           <g transform="translate(0, 110)">
-            <text fill="#94a3b8" font-size="16" font-family="Inter, system-ui, -apple-system, Segoe UI, Roboto">IMDb</text>
-            <text x="0" y="32" fill="#ffffff" font-size="34" font-weight="700" font-family="Inter, system-ui, -apple-system, Segoe UI, Roboto">${escapeXml(imdbRating || 'N/A')}</text>
+            <text fill="#94a3b8" font-size="16" font-family="Inter, system-ui">IMDb</text>
+            <text x="0" y="32" fill="#ffffff" font-size="34" font-weight="700" font-family="Inter, system-ui">${escapeXml(imdbRating || 'N/A')}</text>
           </g>
           <g transform="translate(200, 110)">
-            <text fill="#94a3b8" font-size="16" font-family="Inter, system-ui, -apple-system, Segoe UI, Roboto">Rotten Tomatoes</text>
-            <text x="0" y="32" fill="#ffffff" font-size="34" font-weight="700" font-family="Inter, system-ui, -apple-system, Segoe UI, Roboto">${escapeXml(rotten || 'N/A')}</text>
+            <text fill="#94a3b8" font-size="16" font-family="Inter, system-ui">Rotten Tomatoes</text>
+            <text x="0" y="32" fill="#ffffff" font-size="34" font-weight="700" font-family="Inter, system-ui">${escapeXml(rotten || 'N/A')}</text>
           </g>
+
           <g transform="translate(0, 240)">
-            <text fill="#a78bfa" font-size="18" font-family="Inter, system-ui, -apple-system, Segoe UI, Roboto" opacity="0.9">
+            <text fill="#a78bfa" font-size="18" font-family="Inter, system-ui" opacity="0.9">
               Only the ratings that matter — by Ronny
             </text>
           </g>
@@ -101,23 +87,42 @@ export async function GET(req: Request) {
       </svg>
     `;
 
-    const png = new Resvg(svg, { fitTo: { mode: 'width', value: 1200 } }).render().asPng();
-    const bytes = png instanceof Uint8Array ? png : new Uint8Array(png as any);
-    const safe =
-      `${(title || 'movie').replace(/[^\w]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')}-${year}`.toLowerCase() || 'movie-card';
+    // --- Try PNG first (Resvg). If it fails, fall back to SVG download.
+    const safeBase = `${(title || 'movie').replace(/[^\w]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')}-${year}`.toLowerCase() || 'movie-card';
 
-    return new Response(bytes, {
-      status: 200,
-      headers: {
-        'Content-Type': 'image/png',
-        'Content-Disposition': `attachment; filename="${safe}.png"`,
-        'Content-Length': String(bytes.length),  // Safari likes this
-        'Cache-Control': 'no-store',
-        'X-Content-Type-Options': 'nosniff',
-        'Accept-Ranges': 'none',
-      },
-    });
+    try {
+      const png = new Resvg(svg, { fitTo: { mode: 'width', value: 1200 } }).render().asPng();
+      const bytes = png instanceof Uint8Array ? png : new Uint8Array(png as any);
+
+      return new Response(bytes, {
+        status: 200,
+        headers: {
+          'Content-Type': 'image/png',
+          'Content-Disposition': `attachment; filename="${safeBase}.png"`,
+          'Content-Length': String(bytes.length),      // Chrome/Safari happy path
+          'Cache-Control': 'no-store',
+          'X-Content-Type-Options': 'nosniff',
+        },
+      });
+    } catch {
+      // Fallback: ship the SVG so the user still gets a card (prevents Chrome "file not available").
+      const body = Buffer.from(svg, 'utf8');
+      return new Response(body, {
+        status: 200,
+        headers: {
+          'Content-Type': 'image/svg+xml; charset=utf-8',
+          'Content-Disposition': `attachment; filename="${safeBase}.svg"`,
+          'Content-Length': String(body.length),
+          'Cache-Control': 'no-store',
+          'X-Content-Type-Options': 'nosniff',
+        },
+      });
+    }
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'Share failed' }, { status: 500, headers: { 'Cache-Control': 'no-store' } });
   }
+}
+
+function escapeXml(s: string) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 }

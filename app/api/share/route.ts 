@@ -11,13 +11,12 @@ function escapeXml(s: string) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 }
 
-// HEAD probe for downloads (some browsers do this)
+// Some browsers probe with HEAD before GET
 export async function HEAD(req: Request) {
   const { searchParams } = new URL(req.url);
   const tmdbId = Number(searchParams.get('tmdbId') || '');
-  if (!tmdbId) return new Response(null, { status: 400 });
   return new Response(null, {
-    status: 200,
+    status: tmdbId ? 200 : 400,
     headers: {
       'Content-Type': 'image/png',
       'Cache-Control': 'no-store',
@@ -37,28 +36,28 @@ export async function GET(req: Request) {
     const OMDB_KEY = process.env.OMDB_KEY || '';
     if (!TMDB_KEY) return NextResponse.json({ error: 'Server missing TMDB_KEY' }, { status: 500 });
 
-    // details
+    // Movie details
     const t = await tmdbMovieDetails(tmdbId, TMDB_KEY);
     const title = t.title || t.original_title || '—';
     const year = (t.release_date || '').slice(0, 4) || '—';
     const imdbId: string | null = t?.external_ids?.imdb_id || null;
     const posterUrl = t.poster_path ? tmdbImageUrl(t.poster_path, 'w500') : '';
 
-    // ratings
+    // Ratings (optional)
     let imdbRating: string | null = null;
     let rotten: string | null = null;
     if (OMDB_KEY && imdbId) {
       try {
         const o = await omdbByImdbId(imdbId, OMDB_KEY);
         if (o?.imdbRating && o.imdbRating !== 'N/A') imdbRating = `${o.imdbRating}/10`;
-        if (Array.isArray(o?.Ratings)) {
-          const rt = o.Ratings.find((r: any) => String(r.Source).toLowerCase().includes('rotten'))?.Value;
-          if (rt) rotten = rt;
-        }
+        const rt = Array.isArray(o?.Ratings)
+          ? o.Ratings.find((r: any) => String(r.Source).toLowerCase().includes('rotten'))?.Value
+          : null;
+        if (rt) rotten = rt;
       } catch {/* ignore */}
     }
 
-    // poster -> data URI
+    // Poster → data URI
     let posterDataUri = '';
     if (posterUrl) {
       try {
@@ -87,7 +86,6 @@ export async function GET(req: Request) {
         <g transform="translate(460, 90)">
           <text fill="#e5e7eb" font-family="Inter, system-ui" font-weight="700" font-size="46">${escapeXml(title)}</text>
           <text y="56" fill="#cbd5e1" font-family="Inter, system-ui" font-size="22">${escapeXml(year)}</text>
-
           <g transform="translate(0, 110)">
             <text fill="#94a3b8" font-size="16" font-family="Inter, system-ui">IMDb</text>
             <text x="0" y="32" fill="#ffffff" font-size="34" font-weight="700" font-family="Inter, system-ui">${escapeXml(imdbRating || 'N/A')}</text>
@@ -96,20 +94,17 @@ export async function GET(req: Request) {
             <text fill="#94a3b8" font-size="16" font-family="Inter, system-ui">Rotten Tomatoes</text>
             <text x="0" y="32" fill="#ffffff" font-size="34" font-weight="700" font-family="Inter, system-ui">${escapeXml(rotten || 'N/A')}</text>
           </g>
-
           <g transform="translate(0, 240)">
-            <text fill="#a78bfa" font-size="18" font-family="Inter, system-ui" opacity="0.9">
-              Only the ratings that matter — by Ronny
-            </text>
+            <text fill="#a78bfa" font-size="18" font-family="Inter, system-ui" opacity="0.9">Only the ratings that matter — by Ronny</text>
           </g>
         </g>
       </svg>
     `;
 
-    // Prefer PNG; fall back to SVG on any Resvg issue
-    const safe =
+    const filename =
       `${(title || 'movie').replace(/[^\w]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')}-${year}`.toLowerCase() || 'movie-card';
 
+    // Try PNG first (Resvg). On any failure, fall back to SVG (valid image, no “damaged” message).
     try {
       const png = new Resvg(svg, { fitTo: { mode: 'width', value: 1200 } }).render().asPng();
       const bytes = png instanceof Uint8Array ? png : new Uint8Array(png as any);
@@ -117,7 +112,7 @@ export async function GET(req: Request) {
         status: 200,
         headers: {
           'Content-Type': 'image/png',
-          'Content-Disposition': `attachment; filename="${safe}.png"`,
+          'Content-Disposition': `attachment; filename="${filename}.png"`,
           'Content-Length': String(bytes.length),
           'Cache-Control': 'no-store',
           'X-Content-Type-Options': 'nosniff',
@@ -130,7 +125,7 @@ export async function GET(req: Request) {
         status: 200,
         headers: {
           'Content-Type': 'image/svg+xml; charset=utf-8',
-          'Content-Disposition': `attachment; filename="${safe}.svg"`,
+          'Content-Disposition': `attachment; filename="${filename}.svg"`,
           'Content-Length': String(body.length),
           'Cache-Control': 'no-store',
           'X-Content-Type-Options': 'nosniff',

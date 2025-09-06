@@ -7,7 +7,9 @@ const nextConfig = {
       { protocol: 'https', hostname: 'via.placeholder.com' }
     ]
   },
-  // ensure server can import native/wasm libs without bundling issues
+  experimental: { serverActions: { allowedOrigins: ['*'] } },
+
+  // IMPORTANT: keep Resvg external so Netlify includes it in node_modules for the function
   serverExternalPackages: ['@resvg/resvg-js'],
 };
 export default nextConfig;

@@ -7,9 +7,7 @@ const nextConfig = {
       { protocol: 'https', hostname: 'via.placeholder.com' }
     ]
   },
-  experimental: {
-    serverActions: { allowedOrigins: ['*'] }
-  }
+  // ensure server can import native/wasm libs without bundling issues
+  serverExternalPackages: ['@resvg/resvg-js'],
 };
-
 export default nextConfig;

@@ -1,3 +1,4 @@
+// app/api/search/route.ts
 import { NextResponse } from 'next/server';
 import { tmdbSearchMovies, tmdbImageUrl } from '@/lib/tmdb';
 import type { SearchResult } from '@/lib/types';
@@ -12,8 +13,11 @@ export async function GET(req: Request) {
   if (!q || q.length < 2) {
     return NextResponse.json({ results: [] }, { status: 200, headers: noStore() });
   }
+
   const TMDB_KEY = process.env.TMDB_KEY;
-  if (!TMDB_KEY) return NextResponse.json({ error: 'Server missing TMDB_KEY' }, { status: 500, headers: noStore() });
+  if (!TMDB_KEY) {
+    return NextResponse.json({ error: 'Server missing TMDB_KEY' }, { status: 500, headers: noStore() });
+  }
 
   try {
     const data = await tmdbSearchMovies(q, TMDB_KEY);

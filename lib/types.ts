@@ -1,8 +1,9 @@
-export type TrailerInfo = {
-  youtubeKey?: string;
-  embedUrl?: string;        // https://www.youtube.com/embed/<key>
-  youtubeUrl?: string;      // https://www.youtube.com/watch?v=<key>
-  searchEmbedUrl?: string;  // YT search-embed fallback
+// lib/types.ts
+export type SearchResult = {
+  tmdbId: number;
+  title: string;
+  year: string;
+  poster: string | null; // full URL
 };
 
 export type DetailResult = {
@@ -11,13 +12,12 @@ export type DetailResult = {
   title: string;
   year: string;
   genres: string[];
-  poster: string | null;
+  poster: string | null; // full URL
   plot: string | null;
-  imdbRating: string | null;
-  rottenTomatoes: string | null;
+  imdbRating: string | null;       // e.g., "8.5/10"
+  rottenTomatoes: string | null;   // e.g., "94%"
   links: {
     imdb?: string;
     rottenTomatoesSearch?: string;
   };
-  trailer?: TrailerInfo; // <-- add this
 };
